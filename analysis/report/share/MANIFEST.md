@@ -5,3 +5,6 @@
 | Staged PDF | Source | Version | Rendered |
 |---|---|---|---|
 | `report-2026-08-10-1853-nogit.pdf` | `~/prj/sfw/17-zzrctsim/zzrctsim/analysis/report/report.Rmd` | `nogit` | 2026-08-10 18:53 PDT |
+| `report-2026-08-10-1855-2b8baa7.pdf` | `~/prj/sfw/17-zzrctsim/zzrctsim/analysis/report/report.Rmd` | `2b8baa7` | 2026-08-10 18:55 PDT |
+| `report-2026-08-10-1913-2b8baa7-wip.pdf` | `~/prj/sfw/17-zzrctsim/zzrctsim/analysis/report/report.Rmd` | `2b8baa7-wip` | 2026-08-10 19:13 PDT |
+| `report-2026-08-10-1914-2b8baa7-wip.pdf` | `~/prj/sfw/17-zzrctsim/zzrctsim/analysis/report/report.Rmd` | `2b8baa7-wip` | 2026-08-10 19:14 PDT |

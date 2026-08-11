@@ -27,7 +27,11 @@ knitr::opts_chunk$set(
 options(digits = 4, scipen = 1)
 ```
 
-```{r load, include=FALSE}
+```{r load, include=FALSE, cache=FALSE}
+# Deliberately not cached. pkgload::load_all() attaches the package,
+# knitr records attached packages in cache/__packages, and on a later
+# render it restores cached chunks with library(zzrctsim) -- which
+# fails, because the package is loaded from source and never installed.
 suppressMessages(pkgload::load_all(here::here(), quiet = TRUE))
 ```
 
@@ -307,6 +311,12 @@ cat('zzrctsim: development version\n')
 cat('R: ', R.version.string, '\n', sep = '')
 ```
 
----
-
-*Source: `~/prj/sfw/17-zzrctsim/zzrctsim/analysis/report/report.Rmd`*
+```{r footer, echo=FALSE, results='asis'}
+local({
+  d <- dirname(knitr::current_input(dir = TRUE))
+  while (!file.exists(file.path(d, 'tools', 'stamp-render.R')) &&
+         d != dirname(d)) d <- dirname(d)
+  source(file.path(d, 'tools', 'stamp-render.R'), local = TRUE)
+  footer_stamp()
+})
+```

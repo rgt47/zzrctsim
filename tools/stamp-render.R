@@ -257,6 +257,57 @@ stamp_render <- function(input, encoding = 'UTF-8', ...) {
   invisible(pdf)
 }
 
+## An in-document provenance footer, for the final chunk of a report.
+##
+## The per-page footer defined in stamp.tex is injected at render time
+## and is the primary provenance record. This is the in-document
+## companion, for documents that also want a visible closing stamp, and
+## it exists so that the stamp is written once here rather than
+## hand-rolled in each report. A hand-written footer drifts when the
+## file moves, prints an absolute host path a reader cannot use, and
+## runs past the right margin because backticked text will not wrap.
+##
+## Call it from the last chunk:
+##
+##   ```{r footer, echo=FALSE, results='asis'}
+##   local({
+##     d <- dirname(knitr::current_input(dir = TRUE))
+##     while (!file.exists(file.path(d, 'tools', 'stamp-render.R')) &&
+##            d != dirname(d)) d <- dirname(d)
+##     source(file.path(d, 'tools', 'stamp-render.R'), local = TRUE)
+##     footer_stamp()
+##   })
+##   ```
+##
+## The displayed path reuses .stamp_display(), so it is identical to
+## the one in the per-page footer: shortest tilde-relative form,
+## symlinks in ~ preferred over their resolved targets, and container
+## renders translated back to the host path via ZZ_HOST_ROOT. The path
+## is emitted through \nolinkurl{}, which typesets in typewriter and
+## permits breaks at slashes, so long paths wrap rather than overflow.
+footer_stamp <- function(input = NULL, root = NULL) {
+  if (is.null(input)) {
+    input <- tryCatch(knitr::current_input(dir = TRUE),
+                      error = function(e) NULL)
+  }
+  if (is.null(input) || !nzchar(input)) {
+    return(invisible(NULL))
+  }
+  src <- normalizePath(input, winslash = '/', mustWork = FALSE)
+  if (is.null(root)) {
+    root <- tryCatch(dirname(.stamp_find_tools(dirname(src))),
+                     error = function(e) NULL)
+  }
+  src_display <- .stamp_display(src, root)
+
+  cat(sprintf(
+    '\n\\vfill\n\n---\n\n*Rendered on %s.*  \n*Source: \\nolinkurl{%s}*\n',
+    format(Sys.time(), '%Y-%m-%d at %H:%M %Z'),
+    src_display))
+
+  invisible(src_display)
+}
+
 ## Sourcing this file returns stamp_render, so a YAML knit: hook
 ## may call source(...)$value(input).
 stamp_render

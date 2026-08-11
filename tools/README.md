@@ -73,6 +73,36 @@ needs no package:
 knit: (function(input, ...) { d <- dirname(input); while (!file.exists(file.path(d, 'tools', 'stamp-render.R')) && d != dirname(d)) d <- dirname(d); source(file.path(d, 'tools', 'stamp-render.R'))$value(input) })
 ```
 
+### An in-document closing footer
+
+The per-page footer from `stamp.tex` is the primary provenance
+record and needs no work in the document. A report that also wants a
+visible closing stamp should call `footer_stamp()` from its final
+chunk rather than hand-rolling one:
+
+```
+```{r footer, echo=FALSE, results='asis'}
+local({
+  d <- dirname(knitr::current_input(dir = TRUE))
+  while (!file.exists(file.path(d, 'tools', 'stamp-render.R')) &&
+         d != dirname(d)) d <- dirname(d)
+  source(file.path(d, 'tools', 'stamp-render.R'), local = TRUE)
+  footer_stamp()
+})
+```
+```
+
+It reuses the same path logic as the per-page footer, so the two
+agree: the shortest tilde-relative form, symlinks in `~` preferred
+over their resolved targets, and container renders translated back to
+the host path through `ZZ_HOST_ROOT`. The path is emitted through
+`\nolinkurl{}`, which typesets in typewriter and allows breaks at
+slashes, so a long path wraps instead of running past the margin.
+
+A hand-written footer does none of this: it hard-codes a path that
+goes stale when the file moves, prints an absolute host path a reader
+cannot use, and overflows the margin.
+
 For a multi-document Quarto project, the cleaner arrangement is a
 `pre-render` script in `_quarto.yml`; the `render.sh` route
 remains available for single-file Quarto renders.
