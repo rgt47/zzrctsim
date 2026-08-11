@@ -1,0 +1,20 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+.DS_Store
+inst/doc
+renv/library/
+renv/staging/
+.make/
+.zzcollab.log
+
+# Knit build artifacts. The record of a render is the dated, stamped
+# copy staged in analysis/report/share/, not these regenerable files.
+analysis/report/cache/
+analysis/report/*_files/
+analysis/report/*.tex
+analysis/report/*.pdf
+analysis/report/*.knit.md
+analysis/report/*.utf8.md

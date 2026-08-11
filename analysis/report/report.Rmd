@@ -1,0 +1,312 @@
+---
+title: 'Distributional Families in zzrctsim and the Boundaries of the Gaussian Machinery'
+author: 'Ronald G. Thomas, Ph.D.'
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
+output:
+  pdf_document:
+    latex_engine: xelatex
+    toc: true
+    number_sections: true
+    keep_tex: true
+    highlight: tango
+fontsize: 11pt
+geometry: 'left=3cm,right=3cm,top=2cm,bottom=2cm'
+header-includes:
+  - \usepackage{booktabs}
+  - \usepackage{setspace}
+  - \setstretch{1.1}
+knit: (function(input, ...) { d <- dirname(input); while (!file.exists(file.path(d, 'tools', 'stamp-render.R')) && d != dirname(d)) d <- dirname(d); source(file.path(d, 'tools', 'stamp-render.R'))$value(input) })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE, warning = FALSE, message = FALSE,
+  fig.width = 5, fig.height = 3.5, fig.align = 'center',
+  dev = 'pdf', cache = TRUE, cache.path = 'cache/'
+)
+options(digits = 4, scipen = 1)
+```
+
+```{r load, include=FALSE}
+suppressMessages(pkgload::load_all(here::here(), quiet = TRUE))
+```
+
+# Purpose
+
+`zzrctsim` generates longitudinal trial data. The conditional
+generator now accepts a `family` and `link`, so Gaussian, binomial,
+Poisson and negative binomial responses can be produced. Extending the
+generator does **not** extend the rest of the package: several
+downstream operations are defined only for a Gaussian response, and
+running them on a count or binary outcome would return plausible
+numbers that mean nothing.
+
+This report records which families are supported, why the exponential
+family unifies less than it appears to, exactly which operations are
+Gaussian-only, and how the package refuses work it cannot do.
+
+# What the exponential family does and does not unify
+
+The exponential family unifies *univariate marginal* distributions.
+It supplies no multivariate analogue: there is no canonical
+multivariate binomial or multivariate Poisson corresponding to the
+multivariate normal.
+
+For a Gaussian response the marginal family and the dependence
+structure are the same object, the covariance matrix. For every other
+family they decouple, and a separate dependence mechanism must be
+chosen. That choice, and not the marginal law, is the design decision.
+
+`zzrctsim` takes the conditional route. Random effects are drawn,
+`b_i ~ N(0, G)`, and the response is drawn conditionally,
+`y_ij ~ family(g^{-1}(eta_ij))` with
+`eta_ij = x_ij'beta + z_ij'b_i`. This is the GLMM construction used by
+`lme4` and `glmmTMB`.
+
+Two consequences follow, and both belong to the user rather than to
+the package.
+
+First, dependence between visits arises solely through the shared
+`b_i`. The reachable dependence is exactly what the random-effects
+structure can induce, and there is no marginal escape hatch:
+`dgm_marginal()` has no meaning outside the Gaussian case.
+
+Second, under a non-identity link the marginal mean is not
+`g^{-1}(x'beta)`. The fixed effects are conditional on the random
+effects, so conditional and marginal treatment effects differ in
+magnitude. An `estimand()` used with a non-Gaussian family must state
+which of the two it names.
+
+# Supported families
+
+```{r families}
+s <- trial_schedule(treatment = 4, interval = 3)
+arm <- factor(rep(c('placebo', 'active'), each = 300),
+              levels = c('placebo', 'active'))
+d <- runin_design(s, arm, reference = 'placebo')
+ri <- function(t) matrix(1, length(t), 1)
+b <- c(x_slope = 0.02, x_hinge = 0, x_trt_active = -0.05)
+
+specs <- list(
+  list(nm = 'gaussian(identity)', f = gaussian(),         s2 = 4,    ic = 20),
+  list(nm = 'binomial(logit)',    f = binomial(),         s2 = NULL, ic = 0),
+  list(nm = 'binomial(probit)',   f = binomial('probit'), s2 = NULL, ic = 0),
+  list(nm = 'poisson(log)',       f = poisson(),          s2 = NULL, ic = 1)
+)
+
+set.seed(8)
+out <- do.call(rbind, lapply(specs, function(sp) {
+  g <- dgm_conditional(G = matrix(0.5), sigma2 = sp$s2,
+                       z = ri, family = sp$f)
+  o <- generate_outcomes(d, g, beta = b, intercept = sp$ic)
+  w <- matrix(o$y, ncol = nrow(s), byrow = TRUE)
+  data.frame(family = sp$nm, min = min(o$y), max = max(o$y),
+             mean = mean(o$y), within_cor = cor(w[, 2], w[, 3]))
+}))
+knitr::kable(out, digits = 3, booktabs = TRUE,
+             caption = 'Response support and within-subject
+                        dependence by family.')
+```
+
+The within-subject correlation is induced by the shared random
+intercept in every case. It is not a free parameter: it is whatever
+the random-effects structure implies on the response scale, and it
+differs by family even with `G` held fixed.
+
+Negative binomial responses require `theta`, the dispersion in the
+`size` parameterization of `rnbinom()`. Binomial responses accept
+`trials`, defaulting to `1` for a binary outcome.
+
+# Three scales, all retained
+
+The GLMM path returns three columns rather than collapsing them,
+because for a non-identity link they are genuinely different
+quantities and a reader cannot reconstruct one from another without
+knowing the link.
+
+```{r scales}
+set.seed(21)
+gb <- dgm_conditional(G = matrix(0.5), z = ri, family = binomial())
+ob <- generate_outcomes(d, gb, beta = b, intercept = 0)
+knitr::kable(head(ob[, c('id', 'time', 'mu', 'eta', 'cmean', 'y')], 6),
+             digits = 3, booktabs = TRUE,
+             caption = 'mu is the fixed-effect linear predictor, eta
+                        adds the random effects, cmean applies the
+                        inverse link, y is the draw.')
+```
+
+The realized random effects are retained on a `ranef` attribute, so a
+replicate can be interrogated rather than only re-run.
+
+# What is Gaussian-only, and why
+
+Four operations presuppose a Gaussian response. Each is now guarded.
+
+## Covariance of the response
+
+`cov_at()` returns the covariance of the response. For a binomial or
+Poisson response the variance is determined by the mean, so it cannot
+be specified separately, and the function refuses.
+
+```{r covat, error=TRUE}
+cov_at(gb, s$time)
+```
+
+`linpred_cov()` is the defined alternative for every family: it
+returns `Z G Z'`, the covariance induced on the linear-predictor
+scale.
+
+```{r linpred}
+linpred_cov(gb, s$time)[1:3, 1:3]
+```
+
+## Conversion and the reachability certificate
+
+`certify()`, `as_conditional()` and `as_marginal()` are results about
+`V = Z G Z' + sigma^2 I`. They are Gaussian statements and have no
+non-Gaussian analogue, because the marginal parameterization they
+convert to does not exist outside that case.
+
+## Reference-based post-discontinuation trajectories
+
+`reference_based()` preserves each subject's additive residual
+`y - mu` while shifting the mean. On a count or binary scale that
+construction produces values outside the support: a probability
+shifted by a residual is not a probability, and a shifted count need
+not be an integer. The function refuses rather than returning
+impossible data.
+
+```{r refbased, error=TRUE}
+mk <- dropout_mask(ob, target = 0.30)
+reference_based(ob, mk, method = 'j2r')
+```
+
+## Response-dependent missingness
+
+The dropout hazard follows Diggle and Kenward (1994),
+
+$$
+  \mathrm{logit}\, P(\text{drop at } j)
+   = \psi_0 + \psi_1 (y_{j-1} - c) + \psi_2 (y_j - c),
+$$
+
+with the response centred at `c`. Two things are then scale-dependent:
+the default centring, the mean of `y`; and the interpretation of
+`psi1` as a change in log-odds per unit of `y`.
+
+The guard is deliberately narrow. **MCAR is permitted for every
+family**, because its hazard never reads `y` at all. Only
+response-dependent missingness is restricted, and it is permitted for
+a non-Gaussian family as soon as `center` is supplied explicitly,
+since supplying it is the act of deliberation the guard exists to
+force.
+
+```{r dropguard}
+guard <- function(label, expr) {
+  r <- tryCatch({ expr; 'allowed' },
+                error = function(e) 'blocked')
+  data.frame(call = label, result = r)
+}
+knitr::kable(rbind(
+  guard('binomial, MCAR',              dropout_mask(ob, target = 0.2)),
+  guard('binomial, MAR, no center',    dropout_mask(ob, target = 0.2,
+                                                    psi1 = 0.3)),
+  guard('binomial, MAR, center given', dropout_mask(ob, target = 0.2,
+                                                    psi1 = 0.3,
+                                                    center = 0.5)),
+  guard('binomial, reference_based',   reference_based(ob, mk, 'j2r'))
+), booktabs = TRUE, row.names = FALSE,
+   caption = 'Guards permit MCAR for any family and require an
+              explicit centring for response-dependent mechanisms.')
+```
+
+# What is family-agnostic
+
+The guards are narrow because most of the package makes no
+distributional assumption at all. The design, missingness-application,
+driver and performance layers operate on estimates and indices, not on
+a response distribution:
+
+| Layer | Functions | Family-agnostic |
+|---|---|---|
+| Schedule | `trial_schedule`, `runin_design` | yes |
+| Accrual | `accrue`, `close_out`, `realize_schedule` | yes |
+| Mask application | `apply_mask`, `mask_from_data` | yes |
+| Driver | `run_simulation`, `sim_streams`, `with_rng_state` | yes |
+| Performance | `compute_performance`, `nsim_for_mcse` | yes |
+| Power | `sim_power`, `power_curve`, `sample_size` | yes |
+| Generation | `generate_outcomes` | family-aware |
+| Covariance | `cov_at`, `certify`, `as_conditional` | Gaussian only |
+| Mask generation | `dropout_mask`, `apply_dropout` | Gaussian, or explicit centring |
+| Pattern mixture | `reference_based` | Gaussian only |
+
+This is why the endpoint families of the design document are described
+as *five generators behind one contract* rather than one generator
+with five settings. The reuse lives in the spine, which is built; the
+variation lives in the generator, which is not yet complete.
+
+The spine carries a non-Gaussian study end to end today:
+
+```{r endtoend}
+fit_glm <- function(z) {
+  zz <- z[abs(z$time - max(z$time)) < 1e-8, ]
+  m <- tryCatch(glm(y ~ arm, data = zz, family = binomial()),
+                error = function(e) NULL)
+  if (is.null(m)) return(null_fit())
+  cf <- summary(m)$coefficients
+  fit_result(cf[2, 'Estimate'], cf[2, 'Std. Error'], cf[2, 'Pr(>|z|)'])
+}
+res <- run_simulation(
+  B = 300,
+  generate = function() generate_outcomes(d, gb, beta = b, intercept = 0),
+  analyse = list(glm = fit_glm),
+  estimand = estimand('conditional log-OR at final visit', NA_real_),
+  seed = 2L
+)
+perf <- compute_performance(res, theta = 0)
+knitr::kable(perf[perf$measure %in% c('n_converged', 'emp_se',
+                                      'mod_se', 'rejection'),
+                  c('measure', 'estimate', 'mcse')],
+             digits = 4, booktabs = TRUE, row.names = FALSE,
+             caption = 'Morris Table 6 measures for a binary endpoint.')
+```
+
+Note that `theta` is passed as `0` for a null check rather than as a
+marginal log-odds ratio. The estimand under a logit link is ambiguous
+between the conditional and marginal effect, and the package does not
+resolve that ambiguity on the user's behalf.
+
+# Boundaries and open work
+
+Two of the five planned endpoint families fall outside the exponential
+family altogether and will need their own generators rather than
+another `family` argument.
+
+**Time-to-event.** Censoring, hazards and risk sets are a different
+structure, not a different marginal law. Required by compendia 02, 10,
+13 and 20.
+
+**Mixtures of alpha-stable laws.** No closed-form density, and for
+stability index below two no finite variance. That last point reaches
+beyond the generator: without moments, bias, empirical standard error
+and mean squared error are undefined, so `compute_performance()` must
+dispatch on whether moments exist rather than return a finite-looking
+number. This is the one place where an endpoint family breaks the
+family-agnostic spine.
+
+A copula route would allow arbitrary marginals with a specified
+correlation, but the requested correlation is not the achieved one for
+discrete responses, and the shortfall worsens as events become rarer.
+If that route is added, the achieved correlation must be computed and
+returned rather than assumed.
+
+# Reproducibility
+
+```{r session, echo=FALSE}
+cat('zzrctsim: development version\n')
+cat('R: ', R.version.string, '\n', sep = '')
+```
+
+---
+
+*Source: `~/prj/sfw/17-zzrctsim/zzrctsim/analysis/report/report.Rmd`*

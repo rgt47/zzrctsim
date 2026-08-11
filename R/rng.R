@@ -1,0 +1,74 @@
+# Random number discipline.
+#
+# Morris, White and Crowther (2019) section 4.1: pin the generator
+# kind, set the seed once, and store enough state that any individual
+# replicate can be re-executed in isolation for diagnosis.
+#
+# L'Ecuyer-CMRG substreams are used rather than per-replicate
+# `set.seed()`. Independent substreams are guaranteed by construction,
+# and the same substreams can be replayed across design cells, which is
+# what common random numbers require. Naive `set.seed(i)` gives streams
+# with no such guarantee and silently desynchronizes when the amount of
+# random number consumption changes between cells.
+
+#' Generate independent RNG substreams
+#'
+#' @param n Integer. Number of substreams, normally the number of
+#'   replicates.
+#' @param seed Integer. Master seed.
+#' @return A list of `n` RNG state vectors, each usable with
+#'   [with_rng_state()].
+#' @details
+#' Pins `RNGkind("L'Ecuyer-CMRG")` for the duration of the call and
+#' restores the previous kind on exit, so calling this does not change
+#' the caller's generator.
+#' @export
+sim_streams <- function(n, seed) {
+  stopifnot(n >= 1)
+  old_kind <- RNGkind()
+  old_seed <- if (exists(".Random.seed", envir = globalenv())) {
+    get(".Random.seed", envir = globalenv())
+  } else NULL
+  on.exit({
+    RNGkind(old_kind[1], old_kind[2], old_kind[3])
+    if (!is.null(old_seed)) {
+      assign(".Random.seed", old_seed, envir = globalenv())
+    }
+  }, add = TRUE)
+
+  RNGkind("L'Ecuyer-CMRG")
+  set.seed(seed)
+  s <- .Random.seed
+  out <- vector("list", n)
+  for (i in seq_len(n)) {
+    out[[i]] <- s
+    s <- parallel::nextRNGStream(s)
+  }
+  out
+}
+
+#' Evaluate an expression under a stored RNG state
+#'
+#' Restores the caller's generator state afterwards, so a replicate can
+#' be re-run in isolation without disturbing anything else.
+#'
+#' @param state An RNG state vector from [sim_streams()].
+#' @param expr Expression to evaluate.
+#' @return The value of `expr`.
+#' @export
+with_rng_state <- function(state, expr) {
+  old_kind <- RNGkind()
+  old_seed <- if (exists(".Random.seed", envir = globalenv())) {
+    get(".Random.seed", envir = globalenv())
+  } else NULL
+  on.exit({
+    RNGkind(old_kind[1], old_kind[2], old_kind[3])
+    if (!is.null(old_seed)) {
+      assign(".Random.seed", old_seed, envir = globalenv())
+    }
+  }, add = TRUE)
+
+  RNGkind("L'Ecuyer-CMRG")
+  assign(".Random.seed", state, envir = globalenv())
+  force(expr)
+}

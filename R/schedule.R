@@ -1,0 +1,239 @@
+# Visit schedules spanning run-in, treatment, and common-close phases.
+#
+# The three-phase design follows the formulation in the companion
+# compendium `res/04-runin-power-analysis`, whose closed-form variance
+# results are derived under exactly this parameterization:
+#
+#   run-in         j = -J0, ..., -1   all participants untreated
+#   randomization  j = 0              baseline
+#   treatment      j = 1, ..., J1     randomized to treatment or placebo
+#   common close   j = J1+1, ..., J1+J2   all participants off-treatment
+#
+# with t_j = j * interval, so run-in times are negative and the
+# randomization visit sits at t = 0.
+
+#' Construct a trial visit schedule
+#'
+#' Defines the observation schedule for a longitudinal trial spanning up
+#' to three phases. Either give the phase counts with a common spacing,
+#' or give explicit visit times for an unequally spaced design.
+#'
+#' @param run_in Integer. Number of pre-randomization visits (`J0`).
+#' @param treatment Integer. Number of post-randomization on-treatment
+#'   visits (`J1`).
+#' @param common_close Integer. Number of post-treatment visits during
+#'   which all arms are off treatment (`J2`).
+#' @param interval Numeric. Spacing between visits, in the time unit of
+#'   the study. Ignored when `times` is supplied.
+#' @param times Numeric vector. Explicit visit times for unequally
+#'   spaced designs. Must contain `0`, the randomization visit. When
+#'   supplied, `treatment_end` determines where the common close begins.
+#' @param treatment_end Numeric. The time of the last on-treatment
+#'   visit. Required with `times` when a common close is present;
+#'   defaults to the final time, i.e. no common close.
+#' @return An object of class `trial_schedule`: a data frame with one
+#'   row per visit and columns
+#'   \describe{
+#'     \item{index}{visit index `j`, negative during run-in, `0` at
+#'       randomization}
+#'     \item{time}{visit time `t_j`, negative during run-in}
+#'     \item{phase}{factor: `run_in`, `randomization`, `treatment`,
+#'       `common_close`}
+#'     \item{h}{phase indicator, `0` for `j <= 0` and `1` for `j > 0`}
+#'     \item{on_treatment}{logical, `TRUE` for `1 <= j <= J1`}
+#'   }
+#'   with attributes `J0`, `J1`, `J2`, and `interval`.
+#' @export
+trial_schedule <- function(run_in = 0L,
+                           treatment = 4L,
+                           common_close = 0L,
+                           interval = 1,
+                           times = NULL,
+                           treatment_end = NULL) {
+  if (is.null(times)) {
+    stopifnot(run_in >= 0, treatment >= 1, common_close >= 0,
+              interval > 0)
+    j <- seq.int(-run_in, treatment + common_close)
+    t_j <- j * interval
+    J0 <- as.integer(run_in)
+    J1 <- as.integer(treatment)
+    J2 <- as.integer(common_close)
+  } else {
+    stopifnot(is.numeric(times), !is.unsorted(times))
+    if (!any(abs(times) < .Machine$double.eps^0.5)) {
+      stop("`times` must include 0, the randomization visit.")
+    }
+    t_j <- times
+    zero <- which.min(abs(times))
+    j <- seq_along(times) - zero
+    if (is.null(treatment_end)) treatment_end <- max(times)
+    J0 <- sum(j < 0L)
+    J1 <- sum(j > 0L & t_j <= treatment_end)
+    J2 <- sum(t_j > treatment_end)
+    interval <- NA_real_
+  }
+
+  phase <- factor(
+    ifelse(j < 0L, "run_in",
+           ifelse(j == 0L, "randomization",
+                  ifelse(j <= J1, "treatment", "common_close"))),
+    levels = c("run_in", "randomization", "treatment",
+               "common_close")
+  )
+
+  out <- data.frame(
+    index = as.integer(j),
+    time = t_j,
+    phase = phase,
+    h = as.integer(j > 0L),
+    on_treatment = j >= 1L & j <= J1
+  )
+  attr(out, "J0") <- J0
+  attr(out, "J1") <- J1
+  attr(out, "J2") <- J2
+  attr(out, "interval") <- interval
+  class(out) <- c("trial_schedule", "data.frame")
+  out
+}
+
+#' @export
+print.trial_schedule <- function(x, ...) {
+  cat("<trial_schedule>  J0 =", attr(x, "J0"),
+      " J1 =", attr(x, "J1"),
+      " J2 =", attr(x, "J2"), "\n")
+  cat("  visits:", nrow(x),
+      " time range: [", min(x$time), ",", max(x$time), "]\n")
+  print(as.data.frame(x), row.names = FALSE)
+  invisible(x)
+}
+
+#' Build the fixed-effect design columns for a run-in trial
+#'
+#' Constructs the three slope columns of the model
+#' `Y_ij = alpha + a_i + (delta (1 - h_j) + beta h_j + gamma h_j g_i
+#' + b_i) t_j + w_ij`, expanded over subjects.
+#'
+#' The `common_close` argument selects how the treatment column behaves
+#' after the last on-treatment visit. The two conventions are not
+#' equivalent and give different estimands; see Details.
+#'
+#' @param schedule A `trial_schedule`.
+#' @param arm Integer or logical vector of length `n`, the treatment
+#'   indicator `g_i` (1 = treatment, 0 = control), one entry per
+#'   subject.
+#' @param hinge Logical, length 1 or one entry per arm level. Whether
+#'   each arm's mean profile changes slope at randomization. `FALSE`
+#'   for the reference arm constrains its post-randomization slope to
+#'   equal the run-in slope (`beta = delta`), which makes the run-in
+#'   observations directly informative about the control slope. See
+#'   Details.
+#' @param reference The arm level treated as the reference (control).
+#'   Defaults to the first sorted level.
+#' @param common_close Character. `"revert"` (the default) sets the
+#'   treatment column to zero during the common close, following
+#'   `res/04-runin-power-analysis`. `"retain"` holds the accumulated
+#'   treatment contribution constant after the last on-treatment visit.
+#' @return A data frame with `n * nrow(schedule)` rows and columns
+#'   `id`, `arm`, `index`, `time`, `phase`, and the model columns
+#'   `x_slope` (the common slope on every visit), `x_hinge` (the
+#'   reference arm's post-randomization slope increment, present only
+#'   when the reference arm is hinged), and one `x_trt_<level>` column
+#'   per non-reference arm.
+#' @details
+#' Under `"revert"` the treatment indicator is replaced by
+#' `g_i * I(1 <= j <= J1)`, so the mean for a treated subject returns to
+#' the control trajectory at the start of the common close. This is a
+#' discontinuity in the mean: the accumulated benefit `gamma * t_{J1}`
+#' is removed at once. It is the convention under which the closed-form
+#' variance results of the companion compendium were derived, and it
+#' makes the common-close visits informative about `beta` and the
+#' variance components while contributing nothing to `gamma`.
+#'
+#' Under `"retain"` the treatment column is held at its value at the
+#' last on-treatment visit, so both arms progress with slope `beta`
+#' thereafter while the treated arm keeps its accumulated advantage.
+#' This is the more common clinical reading of an off-treatment
+#' follow-up. It is offered because the choice is a modeling decision
+#' rather than a detail, and it should be made explicitly.
+#'
+#' The slope for a subject in arm `k` is
+#' \itemize{
+#'   \item run-in (`j <= 0`): `delta`, common to all arms;
+#'   \item treatment (`1 <= j <= J1`): `delta + theta_ref + theta_k`;
+#'   \item common close (`j > J1`): `delta + theta_ref`, all arms.
+#' }
+#' `theta_ref` is the reference arm's slope change at randomization and
+#' is dropped when `hinge` is `FALSE` for the reference, constraining
+#' that arm to a single straight line through baseline. `theta_k` is
+#' arm `k`'s increment over the reference and is the treatment effect
+#' on the rate of change. This is a reparameterization of the
+#' `delta`/`beta`/`gamma` form: `theta_ref = beta - delta` and
+#' `theta_k = gamma`, spanning the same column space when every arm is
+#' hinged.
+#' @export
+runin_design <- function(schedule,
+                         arm,
+                         hinge = TRUE,
+                         reference = NULL,
+                         common_close = c("revert", "retain")) {
+  stopifnot(inherits(schedule, "trial_schedule"))
+  common_close <- match.arg(common_close)
+
+  arm_f <- if (is.factor(arm)) arm else factor(arm)
+  levs <- levels(arm_f)
+  if (is.null(reference)) reference <- levs[1]
+  reference <- as.character(reference)
+  if (!reference %in% levs) {
+    stop("`reference` must be one of: ", paste(levs, collapse = ", "))
+  }
+
+  if (length(hinge) == 1L) {
+    hinge <- stats::setNames(rep(hinge, length(levs)), levs)
+  } else {
+    if (is.null(names(hinge))) names(hinge) <- levs
+    if (!all(levs %in% names(hinge))) {
+      stop("`hinge` must be length 1 or named for every arm level.")
+    }
+  }
+
+  n <- length(arm_f)
+  p <- nrow(schedule)
+  J1 <- attr(schedule, "J1")
+  t_last <- schedule$time[schedule$index == J1]
+
+  idx <- rep(schedule$index, times = n)
+  t_j <- rep(schedule$time, times = n)
+  h <- rep(schedule$h, times = n)
+  ontrt <- rep(schedule$on_treatment, times = n)
+  a <- rep(arm_f, each = p)
+
+  # Treatment-phase time, respecting the common-close convention.
+  t_trt <- if (common_close == "revert") {
+    as.numeric(ontrt) * t_j
+  } else {
+    as.numeric(h) * pmin(t_j, t_last)
+  }
+
+  out <- data.frame(
+    id = rep(seq_len(n), each = p),
+    arm = a,
+    index = idx,
+    time = t_j,
+    phase = rep(schedule$phase, times = n),
+    x_slope = t_j
+  )
+
+  # Reference arm's slope change at randomization, applying to every
+  # arm from randomization onward (including the common close).
+  if (isTRUE(hinge[[reference]])) {
+    out$x_hinge <- h * t_j
+  }
+
+  # One treatment-effect column per non-reference, hinged arm.
+  for (k in setdiff(levs, reference)) {
+    if (!isTRUE(hinge[[k]])) next
+    out[[paste0("x_trt_", k)]] <- as.numeric(a == k) * t_trt
+  }
+
+  out
+}

@@ -1,0 +1,9 @@
+schema=1
+template_version=0.3.0
+r_version=4.6.0
+base_image=
+base_digest=
+ppm_snapshot=
+install_mode=
+archetype=package
+generated=2026-08-10T19:26:53Z
