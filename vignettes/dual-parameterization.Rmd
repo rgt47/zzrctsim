@@ -1,0 +1,176 @@
+---
+title: "Two ways to declare a data-generating mechanism"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Two ways to declare a data-generating mechanism}
+  %\VignetteEngine{knitr::knitr}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+library(zzrctsim)
+```
+
+## The choice
+
+A longitudinal data-generating mechanism can be written two ways.
+
+**Conditionally**, through random effects: draw `b_i ~ N(0, G)`, then
+`y_i = X_i beta + Z_i b_i + e_i`. This is what `lme4`, `simr` and
+`glmmTMB` take.
+
+**Marginally**, through the covariance of the response vector `V`
+directly. This is what `mmrm` and `nlme::gls` take.
+
+Most packages accept one or the other. `zzrctsim` accepts either, and
+converts between them where a conversion exists.
+
+## Conditional to marginal is always exact
+
+```{r cond}
+tt <- 1:6
+g <- dgm_conditional(G = diag(c(9, 0.04)), sigma2 = 4)
+round(cov_at(g, tt), 2)
+```
+
+The induced covariance is `Z G Z' + sigma^2 I`, computed exactly.
+`as_marginal()` freezes it into a marginal DGM on a stated grid.
+
+## Marginal to conditional is not always possible
+
+Declare a covariance directly. `cov_ar1()` and `cov_cs()` return
+covariance *functions*, so they extend to any grid.
+
+```{r marg}
+ar1 <- cov_ar1(sd = 1, rho = 0.6)
+round(ar1(tt), 3)
+```
+
+Now ask whether a random-effects model could have produced this.
+
+```{r certify}
+certify(ar1(tt))
+```
+
+`q_min = 5` means AR(1) at six visits needs **five** random effects.
+Compound symmetry, by contrast, needs one:
+
+```{r certify-cs}
+certify(cov_cs(sd = 1, rho = 0.5)(tt))$q_min
+```
+
+That single number explains a fact practitioners meet constantly: a
+random intercept model produces compound symmetry and nothing else.
+
+## Why
+
+`V = Z G Z' + sigma^2 I` requires `Z G Z'` to be positive
+semi-definite with rank at most `q`. Subtracting `sigma^2 I` shifts
+every eigenvalue equally, so the question is settled by the spectrum.
+
+```{r spectrum}
+round(eigen(ar1(tt))$values, 4)
+```
+
+The eigenvalues are distinct, so one common downward shift can zero at
+most one of them. Take `sigma^2` to be the smallest and five positive
+eigenvalues remain; take it any larger and the matrix stops being
+positive semi-definite. Hence `q >= 5`.
+
+For compound symmetry the smallest eigenvalue has multiplicity `p - 1`,
+so a single shift zeroes all of them at once:
+
+```{r spectrum-cs}
+round(eigen(cov_cs(sd = 1, rho = 0.5)(tt))$values, 4)
+```
+
+## The certificate is constructive
+
+It does not merely answer yes or no. It hands back the construction.
+
+```{r reconstruct}
+ct <- certify(ar1(tt))
+max(abs(reconstruct(ct) - ar1(tt)))
+```
+
+Exact to machine precision.
+
+## Refusing rather than approximating
+
+`as_conditional()` will not quietly return an approximation when the
+budget is too small.
+
+```{r refuse, error = TRUE}
+as_conditional(dgm_marginal(ar1), tt, q = 2)
+```
+
+If you want to know how wrong a restricted budget would be,
+`reach_error()` says so:
+
+```{r reach-error}
+reach_error(ar1(tt))
+```
+
+A single random effect is wrong by 28% in relative Frobenius norm.
+That is not an approximation to AR(1); it is a different covariance.
+
+## Two qualifications
+
+**`q_min` is necessary, not sufficient for a particular model.** The
+certificate allows `Z` to be the eigenvectors of `V`. A real
+random-effects specification fixes `Z` to design columns — an
+intercept, a slope in time. Compare the leading eigenvectors:
+
+```{r eigenvectors}
+round(certify(cov_cs(1, 0.5)(tt))$Z[, 1], 3)
+round(certify(ar1(tt))$Z[, 1], 3)
+```
+
+Compound symmetry's is flat, which is exactly the all-ones direction a
+random intercept is confined to — hence the perfect match. AR(1)'s is
+bowed, so even the best one-dimensional direction is unavailable to a
+random intercept. The certificate proves impossibility cleanly; it
+proves possibility only for an unconstrained `Z`.
+
+**The mathematics is classical.** Writing `V = Lambda Lambda' +
+sigma^2 I` and solving by eigendecomposition is probabilistic PCA,
+equivalently factor analysis with isotropic uniquenesses. What is
+useful here is not the algebra but having it run automatically, so
+that a user who supplies an empirically estimated covariance is told
+at once whether the random-effects analysis they intend can represent
+it at all.
+
+## Why this matters in practice
+
+Suppose you estimated this covariance from a completed trial —
+heterogeneous variances rising over follow-up, correlations decaying
+with lag:
+
+```{r empirical}
+sds <- c(4.5, 4.5, 5.4, 6.3, 7.2, 8.2)
+V_emp <- cov_ar1(sd = sds, rho = 0.6)(tt)
+certify(V_emp)$q_min
+```
+
+Five random effects for six visits. A study that plans to generate
+from this covariance and analyse with a random intercept-and-slope
+model is generating something its analysis model cannot represent.
+That may be exactly the misspecification you want to study — but it
+should be a choice, not a surprise.
+
+Generating from it is unaffected: the marginal route needs no
+random-effects representation.
+
+```{r generate-marginal}
+set.seed(2)
+s <- trial_schedule(treatment = 5, interval = 3)
+arm <- factor(rep(c("placebo", "active"), each = 50),
+              levels = c("placebo", "active"))
+d <- runin_design(s, arm, reference = "placebo")
+gm <- dgm_marginal(cov_ar1(sd = sds[1:6], rho = 0.6))
+dat <- generate_outcomes(d, gm,
+                         beta = c(x_slope = 0.5, x_trt_active = -0.25),
+                         intercept = 20)
+round(cor(matrix(dat$y, ncol = nrow(s), byrow = TRUE))[1, ], 3)
+```

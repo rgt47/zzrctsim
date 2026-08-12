@@ -1,0 +1,206 @@
+---
+title: "zzrctsim and simr: two routes to simulated power"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{zzrctsim and simr: two routes to simulated power}
+  %\VignetteEngine{knitr::knitr}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+library(zzrctsim)
+has_simr <- requireNamespace("simr", quietly = TRUE)
+```
+
+```{r notice, echo = FALSE, results = "asis", eval = !has_simr}
+cat("**Note.** `simr` is not installed in the library used to build",
+    "this vignette, so its chunks are shown but not run. Install it",
+    "with `install.packages('simr')` to execute them. The `zzrctsim`",
+    "chunks run either way.\n")
+```
+
+## Scope
+
+`simr` (Green and MacLeod, 2016) is the established package for
+simulation-based power analysis of mixed models, and it is the natural
+comparator. The two tools solve adjacent problems, and the honest
+summary is that neither dominates: `simr` is better when you have a
+pilot model, `zzrctsim` is better when the trial design or the
+covariance structure is the object of study.
+
+## The same question, both ways
+
+Take a two-arm trial, four post-randomization visits, a random
+intercept, and a treatment effect on the rate of change. How many
+subjects per arm for 80% power?
+
+### simr
+
+```{r simr-setup, eval = has_simr}
+library(simr)
+n0 <- 60
+X <- expand.grid(visit = 1:4, subject = factor(1:(2 * n0)))
+X$arm <- factor(rep(c("placebo", "active"), each = 4 * n0))
+
+m <- makeLmer(y ~ visit * arm + (1 | subject),
+              fixef = c(20, 0.5, 0, -0.25),
+              VarCorr = 9, sigma = 2,
+              data = X)
+pc <- powerCurve(m, test = fixed("visit:arm", "t"),
+                 along = "subject",
+                 breaks = c(40, 80, 120, 160), nsim = 200)
+print(pc)
+```
+
+`powerCurve()` returns power at each break with a binomial confidence
+interval. There is no inverse: you read the crossing off by eye, or
+interpolate by hand.
+
+### zzrctsim
+
+```{r zz-setup}
+s <- trial_schedule(treatment = 4, interval = 1)
+g <- dgm_conditional(G = matrix(9), sigma2 = 4,
+                     z = function(t) matrix(1, length(t), 1))
+b <- c(x_slope = 0.5, x_trt_active = -0.25)
+design_fn <- function(n) {
+  runin_design(s, factor(rep(c("placebo", "active"), each = n),
+                         levels = c("placebo", "active")),
+               reference = "placebo")
+}
+ss <- sample_size(
+  target = 0.80, n_grid = c(20, 40, 80, 120), confirm_B = 600L,
+  design_fn = design_fn, dgm = g, beta = b, intercept = 20,
+  estimand = estimand("final contrast",
+                      b[["x_trt_active"]] * max(s$time)),
+  analyse = list(ancova = function(z)
+    fit_ancova(z, reference = "placebo")),
+  B = 300L, seed = 5L)
+ss
+```
+
+The curve is inverted and the selected size **confirmed** by an
+independent longer run, which reports the achieved power with its
+Monte Carlo standard error. That confirmation is the number to quote:
+a size read off an interpolated curve inherits the curve's Monte Carlo
+error, and the confirmation run measures it directly.
+
+## Where the two diverge
+
+### Covariance
+
+`simr` takes `VarCorr`, the random-effects covariance. The reachable
+marginal covariance is therefore `Z G Z' + sigma^2 I`. A random
+intercept gives compound symmetry; nothing else is available.
+
+```{r reachable}
+V_ri <- cov_at(g, s$time)
+round(V_ri[1, ], 3)
+
+sds <- c(4.5, 4.5, 5.4, 6.3, 7.2)
+certify(cov_ar1(sd = sds, rho = 0.6)(1:5))$q_min
+```
+
+An empirically estimated covariance with heterogeneous variances needs
+four random effects for five visits. It is not expressible through
+`VarCorr` at any parameter setting, so a study whose subject *is* the
+covariance cannot be run in `simr`.
+
+### Dropout
+
+This is the sharper difference. `simr` generates the response from a
+fixed design matrix, so missingness has to be imposed on the design
+*before* generation. It can therefore be MCAR or covariate-dependent,
+but it cannot depend on the response: MAR conditioning on an earlier
+observed value, and MNAR, are structurally unreachable.
+
+`zzrctsim` generates complete data first and applies missingness
+afterwards, which is what makes response-dependent mechanisms
+expressible:
+
+```{r dropout}
+d <- design_fn(100)
+dat <- generate_outcomes(d, g, beta = b, intercept = 20)
+mk <- dropout_mask(dat, target = 0.30, psi1 = 0.15)
+attr(mk, "spec")$mechanism
+```
+
+For a study about dropout adjustment, that is decisive.
+
+### Design vocabulary
+
+`simr` has `extend(along =, within =, n =)`, a clean abstraction for
+growing a design along any factor. It has no notion of a run-in phase,
+a common close, staggered accrual, or an interim analysis.
+`zzrctsim` has those and no `extend()`.
+
+```{r phases}
+sch <- trial_schedule(run_in = 2, treatment = 4, common_close = 2,
+                      interval = 3)
+table(sch$phase)
+```
+
+## Where simr is the better choice
+
+Stated plainly, because a comparison the local package wins on every
+axis is not a comparison.
+
+**You have pilot data.** `simr` takes a fitted `merMod` directly. No
+covariance has to be elicited, no parameters guessed — the model you
+already fitted *is* the specification. `zzrctsim` has no equivalent
+path and would require you to read the variance components off and
+retype them.
+
+**Your outcome is a GLMM.** `simr` handles binomial and Poisson
+mixed models today, including tests via likelihood ratio and
+parametric bootstrap. `zzrctsim` generates those families but ships
+only one reference fitter.
+
+**You want an established tool.** `simr` is widely used and
+recognized by reviewers. A local package carries the burden of proof,
+and for a routine power calculation that burden is not worth carrying.
+
+**Your design is not a clinical trial.** `simr` came from ecology and
+is general across factorial and crossed designs. `zzrctsim`'s
+vocabulary — arms, visits, dropout, interim looks — is narrow by
+intent.
+
+## Using both
+
+They compose. A pilot model in `simr` gives a starting sample size
+quickly; `zzrctsim` then prices the design features `simr` cannot
+express, starting from that number rather than from a guess.
+
+```{r both, eval = FALSE}
+# 1. simr, from a fitted pilot model: a starting n.
+# 2. zzrctsim, from that n: what does 30% MAR dropout cost?
+ss_drop <- sample_size(
+  target = 0.80, n_grid = c(60, 110, 160, 220), confirm_B = 600L,
+  design_fn = design_fn, dgm = g, beta = b, intercept = 20,
+  estimand = estimand("final contrast",
+                      b[["x_trt_active"]] * max(s$time)),
+  analyse = list(ancova = function(z)
+    fit_ancova(z, reference = "placebo")),
+  dropout = list(target = 0.30, psi1 = 0.10),
+  B = 300L, seed = 5L)
+ss_drop$n_per_arm
+```
+
+## Summary
+
+| | `simr` | `zzrctsim` |
+|---|---|---|
+| Starting point | fitted `merMod`, or `makeLmer` | design plus DGM specification |
+| Covariance | `VarCorr`, so `Z G Z' + sigma^2 I` | either parameterization, any `V` |
+| Sample size | `powerCurve()` read off by hand | inverted and confirmed |
+| Dropout | design-determined only | MCAR, MAR, MNAR, calibrated |
+| Run-in, common close, accrual | none | native |
+| Non-Gaussian | GLMMs with several tests | generation only, one fitter |
+| Output | rejection rate with an interval | Morris Table 6, MCSE throughout |
+| RNG | `set.seed` | `L'Ecuyer-CMRG` substreams, per-replicate state |
+
+Use `simr` where a fitted pilot model is the natural starting point
+and the outcome is generalized. Use `zzrctsim` where the covariance
+structure, the dropout mechanism, or the trial phase structure is what
+you are studying.

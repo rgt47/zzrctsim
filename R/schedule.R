@@ -225,7 +225,14 @@ runin_design <- function(schedule,
 
   # Reference arm's slope change at randomization, applying to every
   # arm from randomization onward (including the common close).
-  if (isTRUE(hinge[[reference]])) {
+  #
+  # Only meaningful when there are pre-randomization visits. With
+  # J0 = 0 every observation has h = 1 except the randomization visit
+  # itself, where t = 0, so h * t and t coincide exactly and the two
+  # columns are aliased: there is no pre-randomization slope for the
+  # hinge to depart from. Emitting the column anyway would hand the
+  # user a rank-deficient design whose fit silently drops a term.
+  if (isTRUE(hinge[[reference]]) && attr(schedule, "J0") > 0L) {
     out$x_hinge <- h * t_j
   }
 

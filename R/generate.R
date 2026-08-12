@@ -61,10 +61,26 @@ generate_outcomes <- function(design, dgm, beta, intercept = 0) {
     return(.generate_glmm(design, dgm))
   }
 
-  # Subjects sharing a time vector share a covariance, so they can be
-  # drawn in one call. Balanced designs collapse to a single draw; only
-  # genuinely ragged grids, as produced by staggered accrual, need more
-  # than one.
+  if (inherits(dgm, "dgm_mixture")) {
+    return(.generate_mixture(design, dgm))
+  }
+
+  design$y <- .draw_gaussian(design, dgm)
+  attr(design, "beta") <- beta
+  attr(design, "intercept") <- intercept
+  attr(design, "family") <- "gaussian"
+  design
+}
+
+
+# Draw a Gaussian response for a design that already carries `mu`.
+#
+# Subjects sharing a time vector share a covariance and are drawn in
+# one call, so a balanced design collapses to a single `mvrnorm()`;
+# only genuinely ragged grids, as staggered accrual produces, need more
+# than one. Shared by the plain Gaussian path and by each component of
+# a mixture.
+.draw_gaussian <- function(design, dgm) {
   ord <- order(design$id, design$time)
   sig <- vapply(split(design$time[ord], design$id[ord]),
                 function(t) paste0(format(t, digits = 12),
@@ -90,11 +106,7 @@ generate_outcomes <- function(design, dgm, beta, intercept = 0) {
     idx <- unlist(k_list, use.names = FALSE)
     y[idx] <- design$mu[idx] + as.vector(t(draws))
   }
-  design$y <- y
-  attr(design, "beta") <- beta
-  attr(design, "intercept") <- intercept
-  attr(design, "family") <- "gaussian"
-  design
+  y
 }
 
 # GLMM path: draw b_i ~ N(0, G), form the linear predictor, apply the

@@ -80,7 +80,7 @@ expect_equal(np(d_h) - np(d_nh), 1L,
 h <- s$h; tt <- s$time; ot <- as.numeric(s$on_treatment)
 orig <- cbind((1 - h) * tt, h * tt, ot * tt)
 new <- as.matrix(d_h[d_h$arm == "active",
-                     c("x_slope", "x_hinge", "x_trt_active")])
+                     c("x_slope", "x_trt_active")])
 expect_equal(qr(cbind(orig, new))$rank, qr(orig)$rank,
              info = paste('hinge parameterization is a reparameterization',
                           'of delta/beta/gamma, not a different model'))

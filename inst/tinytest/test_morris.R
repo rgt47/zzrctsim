@@ -53,7 +53,7 @@ gd <- dgm_conditional(G = diag(c(9, 0.04)), sigma2 = 4)
 
 # True estimand: change-from-baseline contrast at the final visit.
 tmax <- max(s$time)
-b_true <- c(x_slope = 0.5, x_hinge = -0.1, x_trt_active = -0.25)
+b_true <- c(x_slope = 0.5, x_trt_active = -0.25)
 theta <- b_true[["x_trt_active"]] * tmax
 
 gen <- function() {
@@ -132,7 +132,7 @@ expect_equal(get("coverage", "mcse"),
 
 # ---- null DGM: rejection rate is the type I error rate ---------------
 
-b_null <- c(x_slope = 0.5, x_hinge = -0.1, x_trt_active = 0)
+b_null <- c(x_slope = 0.5, x_trt_active = 0)
 res0 <- run_simulation(
   B = 400,
   generate = function() generate_outcomes(d, gd, beta = b_null,

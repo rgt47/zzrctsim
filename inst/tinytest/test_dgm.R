@@ -103,7 +103,7 @@ arm <- factor(rep(c("placebo", "active"), each = 400),
               levels = c("placebo", "active"))
 d <- runin_design(s, arm, reference = "placebo")
 gd <- dgm_conditional(G = diag(c(9, 0.04)), sigma2 = 4)
-b <- c(x_slope = 0.5, x_hinge = -0.1, x_trt_active = -0.25)
+b <- c(x_slope = 0.5, x_trt_active = -0.25)
 out <- generate_outcomes(d, gd, beta = b, intercept = 20)
 
 expect_true(all(c("mu", "y") %in% names(out)),
@@ -112,7 +112,7 @@ expect_equal(nrow(out), nrow(d), info = 'no rows added or lost')
 expect_true(all(!is.na(out$y)), info = 'complete data before dropout')
 
 # The fixed-effect mean is recovered.
-fit <- stats::lm(y ~ x_slope + x_hinge + x_trt_active, data = out)
+fit <- stats::lm(y ~ x_slope + x_trt_active, data = out)
 est <- stats::coef(fit)[names(b)]
 se <- summary(fit)$coefficients[names(b), "Std. Error"]
 expect_true(all(abs(est - b) < 4 * se),
@@ -223,7 +223,7 @@ s2 <- trial_schedule(treatment = 4, interval = 3)
 arm2 <- factor(rep(c("placebo", "active"), each = 500),
                levels = c("placebo", "active"))
 d2 <- runin_design(s2, arm2, reference = "placebo")
-bb <- c(x_slope = 0.02, x_hinge = 0, x_trt_active = -0.04)
+bb <- c(x_slope = 0.02, x_trt_active = -0.04)
 
 # Binomial with a logit link.
 gb <- dgm_conditional(G = matrix(0.5), sigma2 = NULL,

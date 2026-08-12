@@ -1,5 +1,5 @@
 ---
-title: 'Distributional Families in zzrctsim and the Boundaries of the Gaussian Machinery'
+title: 'zzrctsim: Design, Novel Features, and Distributional Scope'
 author: 'Ronald G. Thomas, Ph.D.'
 date: '`r format(Sys.Date(), "%B %d, %Y")`'
 output:
@@ -35,19 +35,397 @@ options(digits = 4, scipen = 1)
 suppressMessages(pkgload::load_all(here::here(), quiet = TRUE))
 ```
 
-# Purpose
+# Purpose and scope
 
-`zzrctsim` generates longitudinal trial data. The conditional
-generator now accepts a `family` and `link`, so Gaussian, binomial,
-Poisson and negative binomial responses can be produced. Extending the
-generator does **not** extend the rest of the package: several
-downstream operations are defined only for a Gaussian response, and
-running them on a count or binary outcome would return plausible
-numbers that mean nothing.
+`zzrctsim` simulates randomized trials in order to evaluate design and
+analysis choices. It exists because 21 of the 35 research compendia
+under `~/prj/res` are simulation-dependent and 13 of them have no
+simulation code written yet; a shared engine introduced now prevents
+21 divergent reimplementations rather than reconciling them later.
 
-This report records which families are supported, why the exponential
-family unifies less than it appears to, exactly which operations are
-Gaussian-only, and how the package refuses work it cannot do.
+This report has three parts. Section 2 sets out the architecture and
+the contracts that hold it together. Sections 3 to 8 describe, in
+detail, the six features that are not available in existing packages.
+Sections 9 onward record the distributional scope: which response
+families are supported, why the exponential family unifies less than
+it appears to, which operations are Gaussian-only, and how the package
+refuses work it cannot do.
+
+Every measured figure quoted below was produced by running the code,
+either in a chunk of this document or in the test suite, which
+currently holds 194 assertions.
+
+# Design
+
+## The layered pipeline
+
+The package is organized so that the code mirrors ADEMP, and a
+manuscript's Methods subsections map onto modules rather than being
+reconstructed from a monolithic script.
+
+| Layer | Functions | Distribution-aware? |
+|---|---|---|
+| Design | `trial_schedule`, `runin_design` | no |
+| Accrual | `accrue`, `close_out`, `realize_schedule` | no |
+| DGM | `dgm_conditional`, `dgm_marginal`, `dgm_tte`, `cov_at` | yes |
+| Generation | `generate_outcomes`, `generate_tte` | yes |
+| Missingness | `dropout_mask`, `apply_mask`, `reference_based` | partly |
+| Analysis | `fit_result`, `fit_ancova` | no |
+| Driver | `run_simulation`, `sim_streams` | no |
+| Performance | `compute_performance`, `nsim_for_mcse` | no |
+| Power | `sim_power`, `power_curve`, `sample_size` | no |
+
+Only three of nine layers know anything about the response
+distribution. That asymmetry is the central design fact: the reuse
+across endpoint families lives in the spine, and the variation lives
+in the generator. It is why the endpoint families are best described
+as *several generators behind one contract* rather than one generator
+with a family switch.
+
+## Three contracts
+
+**The DGM object** answers `cov_at(dgm, times)` and nothing else is
+assumed of it. Because it is a function of time rather than a fixed
+matrix, a subject observed on an irregular grid, as staggered accrual
+produces, is handled without special-casing.
+
+**Complete data are generated first; missingness is a separate layer.**
+This is what allows the information loss from dropout to be isolated by
+comparison against the complete-data run, and it is the only way a
+response-dependent mechanism can be expressed at all: a hazard that
+reads `y` requires `y` to exist first.
+
+**Fitters return one shape.** `fit_result()` carries `estimate`, `se`,
+`p_value`, `ci_lower`, `ci_upper`, `df`, `converged`. The driver and
+the performance measures never inspect a model object, so a new
+analysis method is a function, not a change to the engine.
+
+## What is deliberately not here
+
+The package does not derive group-sequential boundaries (`rpact`,
+`gsDesign` do), does not fit models beyond a reference ANCOVA
+(`mmrm`, `nlme`, `lme4`, `survival` are the engines), does not perform
+reference-based imputation for *analysis* (`rbmi` does), and is not a
+general Monte Carlo harness (`SimDesign` is). It simulates trials and
+measures what happens.
+
+```{r shared-setup, include=FALSE}
+# Objects used by examples throughout. Defined once here because the
+# feature sections below precede the distributional sections that also
+# use them.
+s <- trial_schedule(treatment = 4, interval = 3)
+arm <- factor(rep(c('placebo', 'active'), each = 300),
+              levels = c('placebo', 'active'))
+d <- runin_design(s, arm, reference = 'placebo')
+ri <- function(t) matrix(1, length(t), 1)
+b <- c(x_slope = 0.02, x_trt_active = -0.05)
+```
+
+# Novel feature 1: dual-parameterized data-generating mechanisms
+
+A longitudinal DGM can be declared two ways: conditionally, through
+random effects `(Z, G, sigma^2)`, or marginally, through a covariance
+`V`. Existing packages pick one. `simr` and `lme4` are conditional
+only; `mmrm` and `nlme` are marginal only. `zzrctsim` accepts either
+and converts between them.
+
+Forward conversion is exact and unremarkable: `V = Z G Z' + sigma^2 I`.
+Backward conversion is the interesting direction, because it is not
+always possible.
+
+```{r dual}
+tt <- 1:6
+cs  <- cov_cs(sd = 1, rho = 0.5)(tt)
+ar1 <- cov_ar1(sd = 1, rho = 0.6)(tt)
+c(CS = certify(cs)$q_min, AR1 = certify(ar1)$q_min)
+```
+
+Compound symmetry is reachable from a single random effect; AR(1) at
+six visits requires five. `as_conditional()` refuses an insufficient
+budget rather than silently returning an approximation.
+
+```{r dual_refuse, error=TRUE}
+as_conditional(dgm_marginal(cov_ar1(1, 0.6)), tt, q = 2)
+```
+
+This matters because the relationship between the two
+parameterizations is itself the subject of several compendia: 18 asks
+when random-effects models reduce to simpler forms, 04 uses the
+Woodbury identity to move between the two variance expressions, and
+09 and 31 both turn on the same mapping.
+
+# Novel feature 2: the reachability certificate
+
+The refusal above is not a heuristic. A random-effects model with `q`
+random effects and i.i.d. residuals induces `V = Z G Z' + sigma^2 I`,
+where `Z G Z'` is positive semi-definite of rank at most `q`. A target
+`V` is therefore reachable only if some `sigma^2 >= 0` makes
+`V - sigma^2 I` positive semi-definite with rank at most `q`.
+
+Subtracting `sigma^2 I` shifts every eigenvalue equally, so the
+question is settled by the spectrum: take `sigma^2` to be the smallest
+eigenvalue and count what remains.
+
+```{r certificate}
+ct <- certify(ar1)
+c(q_min = ct$q_min, sigma2 = round(ct$sigma2, 4),
+  max_reconstruction_error = max(abs(reconstruct(ct) - ar1)))
+```
+
+The certificate is **constructive**: the eigenvectors supply `Z`, the
+shifted eigenvalues supply `G`, and the reconstruction is exact to
+machine precision.
+
+`reach_error()` converts "unreachable" into a magnitude, which is what
+a practitioner actually needs:
+
+```{r reacherr}
+knitr::kable(reach_error(ar1), digits = 4, booktabs = TRUE,
+             caption = 'Best attainable approximation to AR(1) at each
+                        random-effects budget.')
+```
+
+A single random effect is wrong by 28% in relative Frobenius norm.
+That is not a refinement of AR(1); it is a different covariance.
+
+Two honest qualifications. First, `q_min` is **necessary but not
+sufficient for a particular model**: the certificate lets `Z` be the
+eigenvectors, whereas a real specification fixes `Z` to design columns
+such as an intercept and a slope. It proves impossibility cleanly and
+possibility only for an unconstrained `Z`. Second, the underlying
+linear algebra is classical -- it is probabilistic PCA, equivalently
+factor analysis with isotropic uniquenesses -- so the contribution is
+packaging it as an automatic check in a simulation workflow, not the
+mathematics.
+
+# Novel feature 3: trial phase structure and staggered accrual
+
+No surveyed package has a vocabulary for the phases of a trial.
+`trial_schedule()` spans run-in, randomization, treatment and common
+close, with run-in times negative and randomization at zero.
+
+```{r schedule}
+sch <- trial_schedule(run_in = 2, treatment = 4, common_close = 2,
+                      interval = 3)
+knitr::kable(as.data.frame(sch), booktabs = TRUE,
+             caption = 'A three-phase schedule.')
+```
+
+Two design decisions are exposed rather than assumed.
+
+**The common-close convention.** During the common close both arms are
+off treatment. Whether the treated arm reverts to the control
+trajectory or retains its accumulated benefit is a modeling choice
+that changes the estimand, so both are offered:
+
+```{r commonclose}
+arm2 <- factor(c('placebo', 'active'), levels = c('placebo', 'active'))
+rev <- runin_design(sch, arm2, common_close = 'revert')
+ret <- runin_design(sch, arm2, common_close = 'retain')
+rbind(revert = rev$x_trt_active[rev$arm == 'active'],
+      retain = ret$x_trt_active[ret$arm == 'active'])
+```
+
+**The per-arm hinge.** Each arm independently either continues its
+run-in slope through randomization or changes slope there. An unhinged
+control arm constrains `beta = delta`, dropping one parameter, and is
+what makes run-in observations directly informative about the control
+slope -- the efficiency argument of compendium 04.
+
+```{r hinge}
+h  <- runin_design(sch, arm2, hinge = TRUE)
+nh <- runin_design(sch, arm2,
+                   hinge = c(placebo = FALSE, active = TRUE))
+c(hinged_params = sum(grepl('^x_', names(h))),
+  unhinged_params = sum(grepl('^x_', names(nh))))
+```
+
+The parameterization spans the same column space as the
+`delta`/`beta`/`gamma` form used in compendium 04, so the closed-form
+variance results derived there carry over unchanged.
+
+**Staggered accrual with a common close-out.** Follow-up is not a
+constant. Subjects enrol over an accrual window and the study ends on
+one calendar date, so early enrollees are observed *longer* than the
+nominal schedule and the last enrollee exactly as long.
+
+```{r accrual}
+set.seed(3)
+s2 <- trial_schedule(run_in = 1, treatment = 4, interval = 3)
+enr <- accrue(5, period = 12, pattern = 'linear')
+cl  <- close_out(enr, s2, rule = 'lslv')
+rz  <- realize_schedule(s2, enr, cl, extend = TRUE)
+data.frame(enrolled = enr,
+           visits = as.integer(table(rz$id)),
+           follow_up = as.numeric(tapply(rz$time, rz$id, max)))
+```
+
+This is the mechanism that determines the information fraction at an
+interim analysis, and it is why `cov_at()` must be a function of time.
+
+# Novel feature 4: calibrated, mechanism-correct missingness
+
+Dropout follows the selection-model factorization
+`f(Y, R) = f(Y) f(R | Y)`, with the discrete-time hazard of Diggle and
+Kenward (1994),
+
+$$
+  \mathrm{logit}\, P(\text{drop at } j)
+   = \psi_0 + \psi_1 (y_{j-1} - c) + \psi_2 (y_j - c).
+$$
+
+Three properties distinguish this from the usual implementation.
+
+**The mechanisms are nested restrictions of one model**, not three
+separate models: MCAR is `psi1 = psi2 = 0`, MAR is `psi2 = 0`, MNAR
+frees `psi2`. MNAR therefore *extends* MAR rather than replacing its
+history dependence.
+
+**The response is centred and `psi0` is calibrated** to a target
+proportion, so the requested dropout is the realized dropout
+regardless of `psi1` and `psi2`. Because the hazards depend only on
+complete-data responses, the expected proportion has the closed form
+`1 - prod(1 - p_j)` averaged over subjects, so calibration is a
+one-dimensional root-find with no inner Monte Carlo.
+
+```{r dropcal}
+set.seed(9)
+og <- generate_outcomes(d, dgm_conditional(G = diag(c(9, 0.04)),
+                                           sigma2 = 4),
+                        beta = c(x_slope = 0.5, x_trt_active = -0.25),
+                        intercept = 20)
+cal <- do.call(rbind, lapply(list(c(0, 0), c(0.15, 0), c(0.15, 0.10)),
+  function(ps) do.call(rbind, lapply(c(0.10, 0.25, 0.50), function(tg) {
+    z <- dropout_mask(og, target = tg, psi1 = ps[1], psi2 = ps[2])
+    sp <- attr(z, 'spec')
+    data.frame(mechanism = sp$mechanism, psi1 = ps[1], psi2 = ps[2],
+               target = tg, realized = as.numeric(sp$expected))
+  }))))
+knitr::kable(cal, digits = 3, booktabs = TRUE, row.names = FALSE,
+             caption = 'The target proportion is met across mechanisms
+                        and across a range of psi1.')
+```
+
+Without centring, a hazard on an untransformed ADAS-Cog or CDR-SB
+scale saturates: `plogis(qlogis(0.12) + 0.25 * 20) = 0.95`, and every
+subject drops out at the first eligible visit while the nominal rate
+still reads 0.12.
+
+**Mask and filter are separate layers.** `dropout_mask()` generates a
+pattern, `mask_from_data()` imports one from a completed trial, and
+`apply_mask()` applies either. A mask is therefore a first-class
+object that can be saved, inspected, and held fixed across replicates
+under common random numbers -- none of which is possible when
+generation and application are fused in one call.
+
+# Novel feature 5: reference-based trajectories as a *generator*
+
+`rbmi` implements reference-based assumptions for *analysis*.
+`zzrctsim` implements them as *generators*, so that data whose true
+post-discontinuation behaviour follows one assumption can be analysed
+under another and the resulting bias measured.
+
+```{r refgen}
+set.seed(11)
+mkr <- dropout_mask(og, target = 0.40)
+shifts <- vapply(c('j2r', 'cir', 'lmcf', 'cr'), function(m) {
+  z <- reference_based(og, mkr, method = m)
+  post <- z$discontinued & og$arm == 'active'
+  mean(z$mu[post] - og$mu[post])
+}, numeric(1))
+round(shifts, 3)
+```
+
+The ordering `0 < CIR < J2R` is the expected one: copying increments
+in the reference retains the accumulated benefit that jumping to the
+reference discards. Each subject's realized residual is preserved, so
+the within-subject correlation survives the shift.
+
+Discontinuation and missingness are deliberately separate operations,
+because under a treatment-policy estimand post-discontinuation values
+are observed and under a hypothetical estimand they are not. Fusing
+them would make the treatment-policy case, which ICH E9(R1) puts
+first, inexpressible.
+
+# Novel feature 6: Monte Carlo discipline as infrastructure
+
+Morris, White and Crowther (2019) is followed in the code, not only in
+the write-up.
+
+**Streams, not seeds.** `sim_streams()` produces `L'Ecuyer-CMRG`
+substreams. Independence is guaranteed by construction, and the same
+substreams replay across design cells, which is what common random
+numbers require; per-replicate `set.seed(i)` gives neither guarantee
+and desynchronizes silently when the amount of random-number
+consumption changes between cells.
+
+**Every replicate is reproducible in isolation.** The driver stores
+the RNG state that produced each replicate, so a failing or anomalous
+one can be re-run alone for diagnosis rather than by re-running the
+study.
+
+**Errors are recorded, not propagated.** A failure in generation or
+analysis marks the replicate non-converged, retains the message, and
+continues.
+
+**Every performance measure carries a Monte Carlo standard error.**
+
+```{r morris}
+set.seed(5)
+theta <- -0.25 * max(s$time)
+res <- run_simulation(
+  B = 200,
+  generate = function() generate_outcomes(d,
+    dgm_conditional(G = diag(c(9, 0.04)), sigma2 = 4),
+    beta = c(x_slope = 0.5, x_trt_active = -0.25),
+    intercept = 20),
+  analyse = list(ancova = function(z) fit_ancova(z, reference = 'placebo')),
+  estimand = estimand('final-visit contrast', theta), seed = 7L)
+perf <- compute_performance(res)
+knitr::kable(perf[, c('measure', 'estimate', 'mcse')], digits = 4,
+             booktabs = TRUE, row.names = FALSE,
+             caption = 'Morris Table 6 measures, each with its Monte
+                        Carlo standard error.')
+```
+
+`nsim_for_mcse()` inverts these formulas so that the number of
+replicates is justified rather than conventional.
+
+# Sample size by simulation
+
+`sample_size()` inverts a simulated power curve and then **confirms**
+the selected size with an independent longer run, reporting the
+achieved power and its Monte Carlo standard error. `simr`, the
+established comparator, has no inverse: the analyst reads a
+`powerCurve()` off by eye.
+
+The practical value is that design features with no closed-form power
+formula are priced directly. The same design, with and without 30%
+MAR dropout:
+
+```{r samplesize, cache=TRUE}
+set.seed(2)
+sch3 <- trial_schedule(treatment = 4, interval = 3)
+gd3 <- dgm_conditional(G = diag(c(9, 0.04)), sigma2 = 4)
+b3 <- c(x_slope = 0.5, x_trt_active = -0.12)
+dfn <- function(n) runin_design(sch3,
+  factor(rep(c('placebo', 'active'), each = n),
+         levels = c('placebo', 'active')), reference = 'placebo')
+common <- list(design_fn = dfn, dgm = gd3, beta = b3, intercept = 20,
+  estimand = estimand('final contrast', b3[['x_trt_active']] * max(sch3$time)),
+  analyse = list(ancova = function(z) fit_ancova(z, reference = 'placebo')),
+  B = 300L, seed = 5L)
+ss_c <- do.call(sample_size, c(list(target = 0.80,
+  n_grid = c(40, 70, 110, 160), confirm_B = 800L), common))
+ss_d <- do.call(sample_size, c(list(target = 0.80,
+  n_grid = c(60, 110, 160, 220), confirm_B = 800L,
+  dropout = list(target = 0.30, psi1 = 0.10)), common))
+data.frame(scenario = c('complete data', '30% MAR dropout'),
+           n_per_arm = c(ss_c$n_per_arm, ss_d$n_per_arm),
+           confirmed_power = c(ss_c$confirmation$power,
+                               ss_d$confirmation$power),
+           mcse = c(ss_c$confirmation$mcse, ss_d$confirmation$mcse))
+```
 
 # What the exponential family does and does not unify
 
@@ -89,7 +467,7 @@ arm <- factor(rep(c('placebo', 'active'), each = 300),
               levels = c('placebo', 'active'))
 d <- runin_design(s, arm, reference = 'placebo')
 ri <- function(t) matrix(1, length(t), 1)
-b <- c(x_slope = 0.02, x_hinge = 0, x_trt_active = -0.05)
+b <- c(x_slope = 0.02, x_trt_active = -0.05)
 
 specs <- list(
   list(nm = 'gaussian(identity)', f = gaussian(),         s2 = 4,    ic = 20),
@@ -120,6 +498,191 @@ differs by family even with `G` held fixed.
 Negative binomial responses require `theta`, the dispersion in the
 `size` parameterization of `rnbinom()`. Binomial responses accept
 `trials`, defaulting to `1` for a binary outcome.
+
+# Time-to-event: single and recurrent
+
+Time-to-event does not fit the covariance-based parameterization of
+the previous section, and this is a structural fact rather than an
+omission. Censoring, hazards and risk sets are a different kind of
+object from a marginal law, so `dgm_tte()` is a sibling generator
+behind the same contract rather than another `family` argument.
+
+Generation is by **inversion of the cumulative hazard**, which is
+exact rather than a discretization of a grid, and works identically
+for both baseline hazards described below. Under proportional
+hazards the individual cumulative hazard is
+`H_i(t) = H_0(t) exp(lp_i)`, so if `E ~ Exp(1)` then
+`T = H_0^{-1}(E / exp(lp_i))` has exactly the intended distribution.
+For recurrent events the same inversion is applied to successive
+partial sums of i.i.d. `Exp(1)` variates, which yields the event times
+of a non-homogeneous Poisson process with intensity `h_i(t)`.
+
+## Single event
+
+```{r tte_single}
+set.seed(4001)
+subj <- data.frame(id = 1:4000, trt = rep(0:1, each = 2000))
+g_wb <- dgm_tte(shape = 1.6, scale = 15)
+g_wb
+ev <- generate_tte(subj, g_wb, beta = c(trt = log(0.65)),
+                   followup = 30)
+head(ev, 3)
+```
+
+Administrative censoring is the natural companion to staggered
+accrual: passing `followup = close - enroll` censors every subject at
+the common close-out date, with follow-up decreasing in enrolment
+time.
+
+```{r tte_recover}
+fit_cox <- survival::coxph(survival::Surv(time, status) ~ trt,
+                           data = ev)
+c(true_log_HR = log(0.65),
+  estimated = unname(coef(fit_cox)),
+  se = sqrt(unname(vcov(fit_cox)[1, 1])),
+  censored_fraction = mean(ev$status == 0))
+```
+
+## Recurrent events
+
+Recurrent events are returned in counting-process format -- one row
+per interval with `tstart`, `tstop`, `status` and `enum` -- which is
+what `survival::coxph()` expects for an Andersen-Gill model. The
+intervals for a subject tile the follow-up window contiguously and end
+with a censored row.
+
+```{r tte_recurrent}
+set.seed(4002)
+subj2 <- data.frame(id = 1:1500, trt = rep(0:1, each = 750))
+g_rec <- dgm_tte(shape = 1, scale = 10, recurrent = TRUE)
+rec <- generate_tte(subj2, g_rec, beta = c(trt = 0), followup = 20)
+head(rec, 4)
+```
+
+A Gaussian **frailty** on the log-hazard scale induces within-subject
+dependence between gap times, which is what separates a recurrent
+process from independent replications. Its signature is
+overdispersion:
+
+```{r tte_frailty}
+set.seed(4003)
+counts <- function(sd) {
+  g <- dgm_tte(shape = 1, scale = 10, recurrent = TRUE,
+               frailty_sd = sd)
+  r <- generate_tte(subj2, g, beta = c(trt = 0), followup = 20)
+  unlist(tapply(r$status, r$id, sum))
+}
+data.frame(frailty_sd = c(0, 0.8),
+           mean_events = c(mean(counts(0)), mean(counts(0.8))),
+           var_events  = c(var(counts(0)),  var(counts(0.8))))
+```
+
+Without frailty the counts are Poisson, variance equal to mean. With
+frailty they are overdispersed. Note the consequence for
+interpretation: a frailty makes the *marginal* distribution
+non-proportional even though the conditional model is proportional
+hazards, which is the usual reason a fitted hazard ratio attenuates
+toward one. The estimand must say whether it names the conditional or
+the marginal hazard ratio.
+
+## Baseline hazards, and departures from proportionality
+
+Two baseline hazards are available. The Weibull covers monotone
+hazards and reduces to the exponential at `shape = 1`. The
+**piecewise exponential** expresses an arbitrary hazard shape without
+committing to a parametric family, which is why it is the usual
+choice in trial simulation and what `simtrial` is built on. Its
+cumulative hazard is piecewise linear, so inversion remains exact.
+
+```{r tte_pw}
+g_pw <- dgm_tte(breaks = c(6, 12), rates = c(0.02, 0.06, 0.15))
+g_pw
+set.seed(4101)
+sp <- data.frame(id = 1:40000, trt = 0)
+e_pw <- generate_tte(sp, g_pw, beta = c(trt = 0), followup = 20)
+emp <- function(lo, hi) {
+  sum(e_pw$status == 1L & e_pw$time > lo & e_pw$time <= hi) /
+    sum(pmax(0, pmin(e_pw$time, hi) - lo))
+}
+data.frame(interval = c('[0,6)', '[6,12)', '[12,20]'),
+           specified = c(0.02, 0.06, 0.15),
+           realized = c(emp(0, 6), emp(6, 12), emp(12, 20)))
+```
+
+**A delayed treatment effect** is the more consequential addition,
+because it breaks proportional hazards on purpose. Setting
+`effect_lag = L` gives intensity
+`h_i(t) = h_0(t) exp(lp_i * I(t > L))`: the arms are indistinguishable
+until `L` and diverge thereafter. The individual cumulative hazard
+remains invertible in closed form, so this is still generated exactly
+rather than by discretization.
+
+This shape is standard in immuno-oncology and is what anti-amyloid
+trials in Alzheimer's disease are generally argued to show. A constant
+hazard ratio cannot represent it.
+
+```{r tte_lag}
+set.seed(4102)
+s4 <- data.frame(id = 1:12000, trt = rep(0:1, each = 6000))
+lag <- 8
+e_lag <- generate_tte(s4, dgm_tte(shape = 1, scale = 20,
+                                  effect_lag = lag),
+                      beta = c(trt = log(0.4)), followup = 40)
+fz <- survival::coxph(survival::Surv(time, status) ~ trt, data = e_lag)
+data.frame(
+  true_post_lag_HR = 0.4,
+  fitted_constant_HR = exp(unname(coef(fz))),
+  ph_test_p = survival::cox.zph(fz)$table[1, 'p'])
+```
+
+The fitted constant hazard ratio is attenuated toward one relative to
+the true post-lag ratio of 0.4, and `cox.zph()` rejects
+proportionality. Both are the intended behaviour: the generator
+produces data that a proportional-hazards summary misrepresents, which
+is exactly what is needed to study how badly it misrepresents them.
+
+## An endpoint derived from the longitudinal trajectory
+
+Compendium 13 compares MMRM against survival analysis. That comparison
+is only meaningful if both endpoints describe the *same* underlying
+process, rather than being drawn independently.
+`tte_from_trajectory()` defines the event as the first visit at which
+a generated trajectory crosses a threshold.
+
+```{r tte_derived}
+set.seed(4005)
+s6 <- trial_schedule(treatment = 6, interval = 3)
+arm6 <- factor(rep(c('placebo', 'active'), each = 300),
+               levels = c('placebo', 'active'))
+d6 <- runin_design(s6, arm6, reference = 'placebo')
+lo <- generate_outcomes(d6, dgm_conditional(G = diag(c(4, 0.02)),
+                                            sigma2 = 2),
+                        beta = c(x_slope = 0.35, x_trt_active = -0.20),
+                        intercept = 10)
+evd <- tte_from_trajectory(lo, threshold = 16, direction = 'above')
+a6 <- arm6[evd$id]
+fit_d <- survival::coxph(survival::Surv(time, status) ~ a6, data = evd)
+data.frame(arm = c('placebo', 'active'),
+           crossed = c(mean(evd$status[a6 == 'placebo']),
+                       mean(evd$status[a6 == 'active'])),
+           mean_time_given_crossed = c(
+             mean(evd$time[evd$status == 1 & a6 == 'placebo']),
+             mean(evd$time[evd$status == 1 & a6 == 'active'])))
+```
+
+This table is worth pausing on. The treatment effect is large -- 64%
+of placebo cross against 25% of active, a Cox hazard ratio of
+`r round(exp(unname(coef(fit_d))), 3)` -- yet the mean crossing time
+*among those who crossed* is nearly identical between arms.
+Conditioning on having crossed selects the fastest progressors within
+each arm, and selects more severely in the arm where crossing is
+rarer. It is a compact illustration of why a survival endpoint is
+analysed through the hazard with censored observations retained,
+rather than through the mean event time of the subset that had events.
+
+Subjects who never cross are censored at their last observed visit, so
+dropout and administrative censoring both propagate correctly into the
+survival endpoint.
 
 # Three scales, all retained
 
@@ -239,7 +802,7 @@ a response distribution:
 | Driver | `run_simulation`, `sim_streams`, `with_rng_state` | yes |
 | Performance | `compute_performance`, `nsim_for_mcse` | yes |
 | Power | `sim_power`, `power_curve`, `sample_size` | yes |
-| Generation | `generate_outcomes` | family-aware |
+| Generation | `generate_outcomes`, `generate_tte` | family-aware |
 | Covariance | `cov_at`, `certify`, `as_conditional` | Gaussian only |
 | Mask generation | `dropout_mask`, `apply_dropout` | Gaussian, or explicit centring |
 | Pattern mixture | `reference_based` | Gaussian only |
@@ -282,13 +845,9 @@ resolve that ambiguity on the user's behalf.
 
 # Boundaries and open work
 
-Two of the five planned endpoint families fall outside the exponential
-family altogether and will need their own generators rather than
-another `family` argument.
-
-**Time-to-event.** Censoring, hazards and risk sets are a different
-structure, not a different marginal law. Required by compendia 02, 10,
-13 and 20.
+Time-to-event, added above, is one of the two families that fall
+outside the exponential family and needs its own generator rather than
+another `family` argument. One remains.
 
 **Mixtures of alpha-stable laws.** No closed-form density, and for
 stability index below two no finite variance. That last point reaches

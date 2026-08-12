@@ -8,3 +8,6 @@
 | `report-2026-08-10-1855-2b8baa7.pdf` | `~/prj/sfw/17-zzrctsim/zzrctsim/analysis/report/report.Rmd` | `2b8baa7` | 2026-08-10 18:55 PDT |
 | `report-2026-08-10-1913-2b8baa7-wip.pdf` | `~/prj/sfw/17-zzrctsim/zzrctsim/analysis/report/report.Rmd` | `2b8baa7-wip` | 2026-08-10 19:13 PDT |
 | `report-2026-08-10-1914-2b8baa7-wip.pdf` | `~/prj/sfw/17-zzrctsim/zzrctsim/analysis/report/report.Rmd` | `2b8baa7-wip` | 2026-08-10 19:14 PDT |
+| `report-2026-08-10-2004-3594b11.pdf` | `~/prj/sfw/17-zzrctsim/zzrctsim/analysis/report/report.Rmd` | `3594b11` | 2026-08-10 20:04 PDT |
+| `report-2026-08-11-1135-3594b11-wip.pdf` | `~/prj/sfw/17-zzrctsim/zzrctsim/analysis/report/report.Rmd` | `3594b11-wip` | 2026-08-11 11:35 PDT |
+| `report-2026-08-11-1152-3594b11-wip.pdf` | `~/prj/sfw/17-zzrctsim/zzrctsim/analysis/report/report.Rmd` | `3594b11-wip` | 2026-08-11 11:52 PDT |

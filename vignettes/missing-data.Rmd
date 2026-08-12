@@ -1,0 +1,211 @@
+---
+title: "Missing data: mechanisms, masks, and reference-based trajectories"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Missing data: mechanisms, masks, and reference-based trajectories}
+  %\VignetteEngine{knitr::knitr}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+library(zzrctsim)
+set.seed(11)
+```
+
+## Complete data first
+
+Missingness is always applied *after* complete data are generated. That
+ordering is not incidental. It is what lets you measure how much
+dropout costs, by comparing against the complete-data run, and it is
+the only way a mechanism that depends on the response can be expressed
+at all — a hazard that reads `y` needs `y` to exist.
+
+```{r data}
+s <- trial_schedule(treatment = 5, interval = 3)
+arm <- factor(rep(c("placebo", "active"), each = 300),
+              levels = c("placebo", "active"))
+d <- runin_design(s, arm, reference = "placebo")
+g <- dgm_conditional(G = diag(c(9, 0.04)), sigma2 = 4)
+b <- c(x_slope = 0.5, x_trt_active = -0.25)
+dat <- generate_outcomes(d, g, beta = b, intercept = 20)
+mean(is.na(dat$y))
+```
+
+## One model, three mechanisms
+
+The dropout hazard follows Diggle and Kenward (1994). For a subject
+still under observation at visit *j*:
+
+```
+logit P(drop at j) = psi0 + psi1 (y_{j-1} - c) + psi2 (y_j - c)
+```
+
+The three mechanisms are **nested restrictions of one model**, not
+three separate models:
+
+```{r mechanisms}
+c(dropout_mechanism(0, 0),
+  dropout_mechanism(0.2, 0),
+  dropout_mechanism(0.2, 0.1))
+```
+
+MNAR therefore *extends* MAR — setting `psi2` does not remove the
+dependence on history. That matters for sensitivity analysis: a
+contrast between MAR and MNAR should vary one thing, not two.
+
+## The target is the realized dropout
+
+`psi0` is calibrated so that the requested proportion is the one you
+get, whatever `psi1` and `psi2` are. Without this, a hazard specified
+on an untransformed scale saturates:
+
+```{r saturation}
+# An uncentred hazard at a realistic ADAS-Cog level:
+plogis(qlogis(0.12) + 0.25 * 20)
+```
+
+Every subject would drop out at the first eligible visit while the
+nominal rate still read 0.12. `zzrctsim` centres the response and
+solves for `psi0`:
+
+```{r calibration}
+spec <- function(target, psi1 = 0, psi2 = 0) {
+  m <- dropout_mask(dat, target = target, psi1 = psi1, psi2 = psi2)
+  sp <- attr(m, "spec")
+  data.frame(mechanism = sp$mechanism, target = target,
+             psi0 = round(as.numeric(sp$psi0), 3),
+             expected = round(as.numeric(sp$expected), 4),
+             realized = round(mean(tapply(m$missing, m$id, any)), 4))
+}
+rbind(spec(0.15), spec(0.30),
+      spec(0.30, psi1 = 0.15),
+      spec(0.30, psi1 = 0.15, psi2 = 0.10))
+```
+
+`psi0` moves to absorb the change; the target does not.
+
+Because the hazards depend only on complete-data responses, the
+expected proportion has a closed form, `1 - prod(1 - p_j)` averaged
+over subjects. Calibration is therefore a one-dimensional root-find
+with no inner Monte Carlo.
+
+## Differential dropout by arm
+
+Real trials lose more subjects from one arm than the other, and for
+compendium 14 this is the whole subject. Supply a named target and a
+grouping column:
+
+```{r by-arm}
+dat$armf <- arm[dat$id]
+m_by <- dropout_mask(dat, target = c(placebo = 0.15, active = 0.35),
+                     by = "armf")
+m_by
+ever <- tapply(m_by$missing, m_by$id, any)
+round(tapply(ever, arm[as.integer(names(ever))], mean), 3)
+```
+
+`psi_cov` adds covariate-dependent terms in the same way.
+
+## Monotone and intermittent
+
+Dropout is absorbing; intermittent missingness is not. Both calibrate
+to the same target, because the target is "any missing observation".
+
+```{r intermittent}
+mono <- dropout_mask(dat, target = 0.30, monotone = TRUE)
+intr <- dropout_mask(dat, target = 0.30, monotone = FALSE)
+data.frame(
+  kind = c("monotone", "intermittent"),
+  observations_lost = c(sum(mono$missing), sum(intr$missing)),
+  subjects_affected = c(length(unique(mono$id[mono$missing])),
+                        length(unique(intr$id[intr$missing]))))
+```
+
+The same subjects are affected — that is what calibration fixes — but
+absorbing dropout costs far more data.
+
+## Masks are objects
+
+Generation and application are separate layers. A mask can be saved,
+inspected, imported from a completed trial, and **reused across
+replicates**, which is what holds the missingness pattern fixed under
+common random numbers.
+
+```{r masks}
+masked <- apply_mask(dat, mono)
+sum(is.na(masked$y))
+
+# The same pattern applied to an independent replicate:
+dat2 <- generate_outcomes(d, g, beta = b, intercept = 20)
+masked2 <- apply_mask(dat2, mono)
+identical(is.na(masked$y), is.na(masked2$y))
+```
+
+An empirical pattern from a real trial is imported with
+`mask_from_data()`, which also detects whether it is monotone:
+
+```{r import}
+back <- mask_from_data(masked)
+c(identical(back$missing, mono$missing),
+  attr(back, "spec")$monotone)
+```
+
+## Reference-based trajectories
+
+`rbmi` implements reference-based assumptions for *analysis*. Here they
+are **generators**: they produce data whose true post-discontinuation
+behaviour follows a named assumption, so that an analysis assuming
+something else can be measured for bias.
+
+```{r refbased}
+mk <- dropout_mask(dat, target = 0.40)
+shift <- vapply(c("j2r", "cir", "lmcf", "cr"), function(method) {
+  z <- reference_based(dat, mk, method = method)
+  post <- z$discontinued & dat$armf == "active"
+  mean(z$mu[post] - dat$mu[post])
+}, numeric(1))
+round(shift, 3)
+```
+
+The ordering `0 < CIR < J2R` is the expected one: copying increments
+in the reference retains the accumulated benefit that jumping to the
+reference discards. Each subject's realized residual is preserved, so
+within-subject correlation survives the shift.
+
+**Discontinuation is not missingness.** `reference_based()` changes
+the trajectory; `apply_mask()` hides observations. They are separate
+calls because under a treatment-policy estimand post-discontinuation
+values are observed, and under a hypothetical estimand they are not.
+Fusing them would make the treatment-policy case — the one ICH E9(R1)
+puts first — inexpressible.
+
+## What dropout costs
+
+The reason for keeping the layers separate: you can price the
+missingness directly.
+
+```{r cost}
+run <- function(drop) {
+  gen <- function() {
+    z <- generate_outcomes(d, g, beta = b, intercept = 20)
+    if (drop) z <- apply_mask(z, dropout_mask(z, target = 0.30,
+                                              psi1 = 0.10))
+    z
+  }
+  res <- run_simulation(
+    B = 150, generate = gen,
+    analyse = list(a = function(z) fit_ancova(z, reference = "placebo")),
+    estimand = estimand("final contrast",
+                        b[["x_trt_active"]] * max(s$time)),
+    seed = 4L)
+  p <- compute_performance(res)
+  p$estimate[p$measure %in% c("emp_se", "rejection")]
+}
+data.frame(scenario = c("complete", "30% MAR dropout"),
+           rbind(run(FALSE), run(TRUE)))
+```
+
+The columns are empirical standard error and power. Dropout inflates
+the first and reduces the second; `sample_size()` prices the same
+thing in subjects.

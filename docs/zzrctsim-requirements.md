@@ -149,21 +149,41 @@ Five, per the author's decision:
 
 1. **Gaussian longitudinal** -- the continuous repeated-measures case.
    Required by 04, 05, 07, 08, 09, 11, 12, 14, 17, 18, 21, 28, 30, 31.
-2. **Time-to-event** -- Weibull and piecewise-exponential hazards with
-   staggered accrual and administrative censoring. Required by 02
-   (survival arm), 10 (log-rank), 13, 20.
+2. **Time-to-event** -- implemented. Weibull and piecewise-exponential
+   baseline hazards, single and recurrent events, Gaussian frailty, a
+   delayed-effect option giving non-proportional hazards, staggered
+   accrual with administrative censoring, and an endpoint derivable
+   from a generated longitudinal trajectory. Required by 02 (survival
+   arm), 10 (log-rank), 13, 20. Not implemented: accelerated failure
+   time, competing risks, cure models, and baselines other than
+   Weibull or piecewise exponential.
 3. **Binary** -- required by 10 (exact conditional power at small event
    rates), 19.
 4. **Count** -- Poisson and negative binomial, including recurrent
    events. Required by 10 (counts arm).
-5. **Mixtures of alpha-stable laws**, of which the Gaussian case is a
-   special instance. See §4.1.
+5. **Finite mixtures of multivariate normals** -- a component label is
+   drawn per subject and the response from that component's mean and
+   covariance. Required by 29 (Gaussian mixture models for MRI-based
+   progression), and useful wherever a population is a blend of
+   progressor types rather than one homogeneous group.
+6. **Mixtures of alpha-stable laws**, of which the Gaussian mixture is
+   the `alpha = 2` case. See §4.1.
 
-**Implementation status as of 2026-08-10: only family 1 exists.** The
-sole outcome-generating code in the package is `MASS::mvrnorm()` at
-`R/generate.R:77-80`. Families 2 to 5 are requirements, not features,
-and compendia 02, 10, 13, 19 and 20 cannot migrate until they are
-built. This is why Phase 0 of §13.3 migrates nothing.
+Families 5 and 6 were previously listed as one item. Separating them
+matters because they are not comparably difficult. A normal mixture
+has finite moments, so the covariance machinery, the reachability
+certificate and the ADEMP performance measures all continue to apply
+unchanged; it is an additive feature. A stable mixture with
+`alpha < 2` has no variance, which withdraws the foundation those
+three rest on (§4.2); it is a structural change. Grouping them made
+the easy case look as blocked as the hard one.
+
+**Implementation status as of 2026-08-11.** Families 1 to 5 are built:
+Gaussian, the exponential-family set (binomial, Poisson, negative
+binomial) via `family=` on the conditional generator, time-to-event
+via `dgm_tte()`, and normal mixtures via `dgm_mixture()`. Family 6 is
+not built, and remains a requirement rather than a feature. Compendia
+25 and 26 cannot migrate until it is; 29 now can.
 
 ### 4.0 Should the families be unified as an exponential family?
 

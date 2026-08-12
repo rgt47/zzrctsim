@@ -9,7 +9,7 @@ arm <- factor(rep(c("placebo", "active"), each = 250),
               levels = c("placebo", "active"))
 d <- runin_design(s, arm, reference = "placebo")
 gd <- dgm_conditional(G = diag(c(9, 0.04)), sigma2 = 4)
-b <- c(x_slope = 0.5, x_hinge = -0.1, x_trt_active = -0.25)
+b <- c(x_slope = 0.5, x_trt_active = -0.25)
 out <- generate_outcomes(d, gd, beta = b, intercept = 20)
 out$armf <- arm[out$id]
 

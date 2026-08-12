@@ -1,0 +1,217 @@
+---
+title: "Time-to-event endpoints: single, recurrent, and derived"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Time-to-event endpoints: single, recurrent, and derived}
+  %\VignetteEngine{knitr::knitr}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+library(zzrctsim)
+has_surv <- requireNamespace("survival", quietly = TRUE)
+knitr::opts_chunk$set(eval = TRUE)
+```
+
+## Why this is a separate generator
+
+Time-to-event does not fit the covariance-based parameterization used
+for continuous outcomes, and that is structural rather than an
+oversight. Censoring, hazards and risk sets are a different kind of
+object from a marginal law, so `dgm_tte()` sits beside
+`dgm_conditional()` rather than being another `family` argument.
+
+Generation is by **inversion of the cumulative hazard**, which is
+exact. Under proportional hazards the individual cumulative hazard is
+`H_i(t) = H_0(t) exp(lp_i)`, so if `E ~ Exp(1)` then
+`T = H_0^{-1}(E / exp(lp_i))` has precisely the intended
+distribution — no grid, no discretization.
+
+## Single event
+
+```{r single}
+set.seed(4001)
+subj <- data.frame(id = 1:4000, trt = rep(0:1, each = 2000))
+g <- dgm_tte(shape = 1.6, scale = 15)
+g
+ev <- generate_tte(subj, g, beta = c(trt = log(0.65)), followup = 30)
+head(ev, 3)
+```
+
+`status` is 1 for an event and 0 for administrative censoring. Checking
+that the mechanism is what it claims:
+
+```{r single-check, eval = has_surv}
+fit <- survival::coxph(survival::Surv(time, status) ~ trt, data = ev)
+c(true_log_HR = log(0.65),
+  estimated = unname(coef(fit)),
+  se = sqrt(unname(vcov(fit)[1, 1])),
+  censored = mean(ev$status == 0))
+```
+
+## Follow-up from staggered accrual
+
+`followup` may be a vector, which is what makes this compose with a
+common close-out date: subjects enrolled early are followed longer.
+
+```{r accrual}
+set.seed(12)
+enrol <- accrue(nrow(subj), period = 12, pattern = "uniform")
+close <- max(enrol) + 24
+ev2 <- generate_tte(subj, g, beta = c(trt = log(0.65)),
+                    followup = close - enrol)
+round(quantile(close - enrol, c(0, 0.5, 1)), 2)
+mean(ev2$status)
+```
+
+Follow-up now ranges from 24 months for the last enrollee up to 36 for
+the first, and the event rate reflects that.
+
+## Baseline hazards
+
+The Weibull covers monotone hazards and reduces to the exponential at
+`shape = 1`. The **piecewise exponential** expresses an arbitrary
+hazard shape without committing to a parametric family, which is why
+it is the usual choice in trial simulation.
+
+```{r piecewise}
+set.seed(4101)
+g_pw <- dgm_tte(breaks = c(6, 12), rates = c(0.02, 0.06, 0.15))
+g_pw
+sp <- data.frame(id = 1:40000, trt = 0)
+e_pw <- generate_tte(sp, g_pw, beta = c(trt = 0), followup = 20)
+emp <- function(lo, hi) {
+  sum(e_pw$status == 1L & e_pw$time > lo & e_pw$time <= hi) /
+    sum(pmax(0, pmin(e_pw$time, hi) - lo))
+}
+data.frame(interval = c("[0,6)", "[6,12)", "[12,20]"),
+           specified = c(0.02, 0.06, 0.15),
+           realized = round(c(emp(0, 6), emp(6, 12), emp(12, 20)), 4))
+```
+
+## A delayed treatment effect
+
+`effect_lag` breaks proportional hazards deliberately: the arms are
+indistinguishable until the lag and diverge after it. This is the
+shape immuno-oncology trials show, and the one anti-amyloid trials in
+Alzheimer's disease are generally argued to show. A constant hazard
+ratio cannot represent it.
+
+```{r lag, eval = has_surv}
+set.seed(4102)
+s4 <- data.frame(id = 1:12000, trt = rep(0:1, each = 6000))
+e_lag <- generate_tte(s4, dgm_tte(shape = 1, scale = 20,
+                                  effect_lag = 8),
+                      beta = c(trt = log(0.4)), followup = 40)
+fz <- survival::coxph(survival::Surv(time, status) ~ trt, data = e_lag)
+data.frame(true_post_lag_HR = 0.4,
+           fitted_constant_HR = round(exp(unname(coef(fz))), 3),
+           ph_test_p = signif(survival::cox.zph(fz)$table[1, "p"], 3))
+```
+
+The fitted constant hazard ratio is attenuated toward one, and
+`cox.zph()` rejects proportionality. Both are intended: the generator
+produces data a proportional-hazards summary misrepresents, which is
+what you need in order to quantify how badly.
+
+## Recurrent events
+
+Setting `recurrent = TRUE` generates all events in the follow-up
+window, returned in counting-process format — one row per interval,
+which is what `coxph()` expects for an Andersen-Gill model.
+
+```{r recurrent}
+set.seed(4002)
+subj2 <- data.frame(id = 1:1500, trt = rep(0:1, each = 750))
+g_rec <- dgm_tte(shape = 1, scale = 10, recurrent = TRUE)
+rec <- generate_tte(subj2, g_rec, beta = c(trt = 0), followup = 20)
+head(rec, 4)
+```
+
+The intervals for a subject tile the window contiguously and end with
+a censored row.
+
+A Gaussian **frailty** on the log-hazard scale induces within-subject
+dependence between gap times, which is what distinguishes a recurrent
+process from independent replications. Its signature is
+overdispersion:
+
+```{r frailty}
+set.seed(4003)
+counts <- function(sd) {
+  gg <- dgm_tte(shape = 1, scale = 10, recurrent = TRUE,
+                frailty_sd = sd)
+  r <- generate_tte(subj2, gg, beta = c(trt = 0), followup = 20)
+  unlist(tapply(r$status, r$id, sum))
+}
+data.frame(frailty_sd = c(0, 0.8),
+           mean = round(c(mean(counts(0)), mean(counts(0.8))), 3),
+           variance = round(c(var(counts(0)), var(counts(0.8))), 3))
+```
+
+Without frailty the counts are Poisson, variance equal to mean. With
+frailty they are overdispersed.
+
+A frailty also makes the *marginal* distribution non-proportional even
+though the conditional model is proportional hazards. That is the
+usual reason a fitted hazard ratio attenuates toward one, and it means
+an `estimand()` must say whether it names the conditional or the
+marginal hazard ratio.
+
+## An endpoint derived from a longitudinal trajectory
+
+Comparing MMRM against survival analysis is only meaningful if both
+endpoints describe the *same* underlying process rather than being
+drawn independently. `tte_from_trajectory()` defines the event as the
+first visit at which a generated trajectory crosses a threshold.
+
+```{r derived}
+set.seed(4005)
+s6 <- trial_schedule(treatment = 6, interval = 3)
+arm6 <- factor(rep(c("placebo", "active"), each = 300),
+               levels = c("placebo", "active"))
+d6 <- runin_design(s6, arm6, reference = "placebo")
+lo <- generate_outcomes(d6, dgm_conditional(G = diag(c(4, 0.02)),
+                                            sigma2 = 2),
+                        beta = c(x_slope = 0.35, x_trt_active = -0.20),
+                        intercept = 10)
+evd <- tte_from_trajectory(lo, threshold = 16, direction = "above")
+a6 <- arm6[evd$id]
+data.frame(arm = c("placebo", "active"),
+           crossed = round(c(mean(evd$status[a6 == "placebo"]),
+                             mean(evd$status[a6 == "active"])), 3),
+           mean_time_given_crossed = round(c(
+             mean(evd$time[evd$status == 1 & a6 == "placebo"]),
+             mean(evd$time[evd$status == 1 & a6 == "active"])), 2))
+```
+
+This table repays a second look. The treatment effect is large — 64%
+of placebo cross against 25% of active — yet the mean crossing time
+*among those who crossed* is nearly identical between arms.
+
+Conditioning on having crossed selects the fastest progressors within
+each arm, and selects more severely in the arm where crossing is
+rarer. The correct comparison retains the censored observations:
+
+```{r derived-cox, eval = has_surv}
+fd <- survival::coxph(survival::Surv(time, status) ~ a6, data = evd)
+c(hazard_ratio = round(exp(unname(coef(fd))), 3),
+  p = signif(summary(fd)$coefficients[1, "Pr(>|z|)"], 3))
+```
+
+It is a compact demonstration of why a survival endpoint is analysed
+through the hazard rather than through the mean event time of the
+subset that had events.
+
+Subjects who never cross are censored at their last observed visit, so
+dropout and administrative censoring both propagate into the survival
+endpoint correctly.
+
+## What is not implemented
+
+Accelerated failure time models, competing risks, cure models, and
+baseline hazards other than Weibull or piecewise exponential. For a
+trial where death competes with progression — common in Alzheimer's
+disease — treating death as censoring is the classic error, and this
+package currently gives you no way to avoid it.

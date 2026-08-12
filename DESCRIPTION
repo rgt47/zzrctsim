@@ -31,5 +31,11 @@ Imports:
     parallel,
     stats
 Suggests:
+    knitr,
+    lme4,
+    rmarkdown,
+    simr,
+    survival,
     tinytest (>= 1.4.0)
+VignetteBuilder: knitr
 Config/roxygen2/version: 8.0.0
