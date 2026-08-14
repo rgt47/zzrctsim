@@ -154,7 +154,7 @@ certify(V_emp)$q_min
 ```
 
 Five random effects for six visits. A study that plans to generate
-from this covariance and analyse with a random intercept-and-slope
+from this covariance and analyze with a random intercept-and-slope
 model is generating something its analysis model cannot represent.
 That may be exactly the misspecification you want to study — but it
 should be a choice, not a surprise.

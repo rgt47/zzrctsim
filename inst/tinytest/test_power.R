@@ -26,7 +26,7 @@ anc <- list(ancova = function(z) fit_ancova(z, reference = "placebo"))
 
 # ---- sim_power -------------------------------------------------------
 
-p20 <- sim_power(20L, mk_design, gd, b, es, anc, B = 100L,
+p20 <- sim_power(20L, mk_design, gd, b, anc, es, B = 100L,
                  intercept = 20, seed = 1L)
 
 expect_true(is.data.frame(p20), info = 'sim_power returns a data frame')
@@ -44,8 +44,8 @@ expect_true(p20$mcse > 0,
             info = 'a non-degenerate rejection rate has a positive MCSE')
 
 # Two fitters give two rows, one per method.
-p_two <- sim_power(20L, mk_design, gd, b, es,
-                   analyse = list(
+p_two <- sim_power(20L, mk_design, gd, b, estimand = es,
+                   analyze = list(
                      final = function(z) fit_ancova(z, reference = "placebo"),
                      mid = function(z) fit_ancova(z, visit_time = 6,
                                                   reference = "placebo")),
@@ -55,7 +55,7 @@ expect_equal(sort(p_two$method), c("final", "mid"),
              info = 'both methods are reported')
 
 # Reproducibility: the same seed gives the same answer.
-expect_equal(sim_power(20L, mk_design, gd, b, es, anc, B = 100L,
+expect_equal(sim_power(20L, mk_design, gd, b, anc, es, B = 100L,
                        intercept = 20, seed = 1L)$power,
              p20$power,
              info = 'sim_power is reproducible from its seed')
@@ -63,9 +63,9 @@ expect_equal(sim_power(20L, mk_design, gd, b, es, anc, B = 100L,
 # `dropout` is plumbed through sim_power -> dropout_mask -> apply_mask
 # -> run_simulation. Heavy dropout must both change the result and
 # still yield a valid row.
-p40 <- sim_power(40L, mk_design, gd, b, es, anc, B = 100L,
+p40 <- sim_power(40L, mk_design, gd, b, anc, es, B = 100L,
                  intercept = 20, seed = 1L)
-p40_drop <- sim_power(40L, mk_design, gd, b, es, anc, B = 100L,
+p40_drop <- sim_power(40L, mk_design, gd, b, anc, es, B = 100L,
                       intercept = 20, seed = 1L,
                       dropout = list(target = 0.6, by = "arm"))
 
@@ -82,7 +82,7 @@ expect_true(p40_drop$power < p40$power,
 
 n_grid <- c(10L, 20L, 40L, 80L)
 pc <- power_curve(n_grid, design_fn = mk_design, dgm = gd, beta = b,
-                  estimand = es, analyse = anc, B = 100L,
+                  estimand = es, analyze = anc, B = 100L,
                   intercept = 20, seed = 1L)
 
 expect_inherits(pc, "power_curve", info = 'power_curve S3 class')
@@ -114,7 +114,7 @@ expect_true(is.character(capture.output(print(pc))[1]),
 
 ss <- sample_size(target = 0.80, n_grid = n_grid, confirm_B = 100L,
                   design_fn = mk_design, dgm = gd, beta = b,
-                  estimand = es, analyse = anc, B = 100L,
+                  estimand = es, analyze = anc, B = 100L,
                   intercept = 20, seed = 1L)
 
 expect_inherits(ss, "sample_size", info = 'sample_size S3 class')
@@ -151,9 +151,9 @@ expect_true(is.character(capture.output(print(ss))[1]),
 # verified exactly: the confirmation must equal a `sim_power()` call at
 # seed + 1, and must not equal one at the curve's own seed. Both are
 # deterministic given the seeds, so neither assertion is flaky.
-conf_offset <- sim_power(ss$n_per_arm, mk_design, gd, b, es, anc,
+conf_offset <- sim_power(ss$n_per_arm, mk_design, gd, b, anc, es,
                          B = 100L, intercept = 20, seed = 2L)
-conf_same <- sim_power(ss$n_per_arm, mk_design, gd, b, es, anc,
+conf_same <- sim_power(ss$n_per_arm, mk_design, gd, b, anc, es,
                        B = 100L, intercept = 20, seed = 1L)
 
 expect_equal(ss$confirmation$power, conf_offset$power,
@@ -165,7 +165,7 @@ expect_false(isTRUE(all.equal(conf_offset$power, conf_same$power)),
 ss_again <- sample_size(target = 0.80, n_grid = n_grid,
                         confirm_B = 100L, design_fn = mk_design,
                         dgm = gd, beta = b, estimand = es,
-                        analyse = anc, B = 100L, intercept = 20,
+                        analyze = anc, B = 100L, intercept = 20,
                         seed = 1L)
 expect_equal(ss_again$n_per_arm, ss$n_per_arm,
              info = 'the search is reproducible from its seed')
@@ -176,7 +176,7 @@ expect_equal(ss_again$confirmation$power, ss$confirmation$power,
 
 ss0 <- sample_size(target = 0.80, n_grid = n_grid, confirm_B = 0L,
                    design_fn = mk_design, dgm = gd, beta = b,
-                   estimand = es, analyse = anc, B = 100L,
+                   estimand = es, analyze = anc, B = 100L,
                    intercept = 20, seed = 1L)
 expect_true(is.null(ss0$confirmation),
             info = 'confirm_B = 0 skips the confirmation run')
@@ -188,7 +188,7 @@ expect_equal(ss0$n_per_arm, ss$n_per_arm,
 expect_error(
   sample_size(target = 0.90, n_grid = c(10L, 20L), confirm_B = 0L,
               design_fn = mk_design, dgm = gd, beta = b_null,
-              estimand = es0, analyse = anc, B = 50L,
+              estimand = es0, analyze = anc, B = 50L,
               intercept = 20, seed = 1L),
   pattern = "Extend `n_grid` upward",
   info = 'unreachable target is an error naming the remedy')
@@ -198,7 +198,7 @@ expect_error(
 expect_warning(
   sample_size(target = 0.30, n_grid = c(40L, 80L), confirm_B = 0L,
               design_fn = mk_design, dgm = gd, beta = b,
-              estimand = es, analyse = anc, B = 50L,
+              estimand = es, analyze = anc, B = 50L,
               intercept = 20, seed = 1L),
   pattern = "upper bound",
   info = 'target below the whole curve warns that n is an upper bound')
@@ -206,7 +206,7 @@ expect_warning(
 ss_ub <- suppressWarnings(
   sample_size(target = 0.30, n_grid = c(40L, 80L), confirm_B = 0L,
               design_fn = mk_design, dgm = gd, beta = b,
-              estimand = es, analyse = anc, B = 50L,
+              estimand = es, analyze = anc, B = 50L,
               intercept = 20, seed = 1L))
 expect_equal(ss_ub$n_per_arm, 40L,
              info = 'the upper bound returned is the smallest grid size')
@@ -216,7 +216,7 @@ expect_equal(ss_ub$n_per_arm, 40L,
 expect_error(
   sample_size(target = 0.80, n_grid = c(10L, 20L), confirm_B = 0L,
               design_fn = mk_design, dgm = gd, beta = b, estimand = es,
-              analyse = list(
+              analyze = list(
                 final = function(z) fit_ancova(z, reference = "placebo"),
                 mid = function(z) fit_ancova(z, visit_time = 6,
                                              reference = "placebo")),
@@ -229,10 +229,10 @@ expect_error(
 expect_error(
   sample_size(target = 1.2, n_grid = c(10L, 20L), confirm_B = 0L,
               design_fn = mk_design, dgm = gd, beta = b, estimand = es,
-              analyse = anc, B = 20L, intercept = 20, seed = 1L),
+              analyze = anc, B = 20L, intercept = 20, seed = 1L),
   info = 'target outside (0, 1) is rejected')
 expect_error(
   sample_size(target = 0.80, n_grid = 10L, confirm_B = 0L,
               design_fn = mk_design, dgm = gd, beta = b, estimand = es,
-              analyse = anc, B = 20L, intercept = 20, seed = 1L),
+              analyze = anc, B = 20L, intercept = 20, seed = 1L),
   info = 'a grid of one point cannot bracket the answer')

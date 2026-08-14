@@ -6,10 +6,10 @@
 # hand, and any of those can be applied to any simulated data set with
 # the same design.
 #
-# Fusing the two, as `apply_dropout()` originally did, makes an
-# externally supplied pattern impossible to use and makes it awkward to
-# hold the missingness pattern fixed across replicates under common
-# random numbers.
+# An earlier single-call wrapper fused generation and application. That
+# made an externally supplied pattern impossible to use, and made it
+# awkward to hold the missingness pattern fixed across replicates under
+# common random numbers, so it was removed in favor of this pair.
 
 # The response family a data set was generated from, or "gaussian" when
 # unrecorded (data not produced by generate_outcomes()).
@@ -19,7 +19,7 @@
 }
 
 # Response-dependent missingness reads `y` on a continuous scale and
-# centres it. That is well defined for a Gaussian response and needs a
+# centers it. That is well defined for a Gaussian response and needs a
 # deliberate choice otherwise, so a non-Gaussian family is allowed only
 # when `center` is supplied explicitly. MCAR is always allowed, because
 # its hazard never touches `y`.
@@ -30,7 +30,7 @@
   if (!is.null(center)) return(invisible(TRUE))
   stop("Response-dependent missingness (psi1 or psi2 non-zero) on a '",
        fam, "' response requires `center` to be supplied explicitly.\n",
-       "  The default centring is the mean of `y`, and `psi1` is a ",
+       "  The default centering is the mean of `y`, and `psi1` is a ",
        "change in log-odds per unit of `y`; neither is interpretable ",
        "on a non-Gaussian scale without a deliberate choice.\n",
        "  MCAR (psi1 = psi2 = 0) is available for every family.",
@@ -51,8 +51,10 @@
 #' @param psi0 Numeric. Dropout logit intercept, supplied directly
 #'   instead of calibrating from `target`. May be named by the levels
 #'   of `by`.
-#' @param psi1,psi2 Numeric. Coefficients on the previous and current
-#'   centered response. See [apply_dropout()].
+#' @param psi1,psi2 Numeric. Coefficients on the previously observed
+#'   and the current, unobserved response, each centered at `center`.
+#'   Non-zero `psi1` gives MAR; non-zero `psi2` gives MNAR. See
+#'   Details.
 #' @param psi_cov Named numeric vector of coefficients on additional
 #'   columns of `dat`, giving covariate-dependent missingness. Columns
 #'   are used as supplied, without centering.
@@ -65,6 +67,35 @@
 #' @param from Numeric. Missingness only permitted where `time > from`.
 #' @return An object of class `missing_mask`: a data frame of `id`,
 #'   `time`, and logical `missing`, with a `spec` attribute.
+#' @details
+#' The hazard follows Diggle and Kenward (1994) \doi{10.2307/2986113}:
+#' for a subject still under observation at visit `j`,
+#' \deqn{\mathrm{logit}\, P(\mathrm{drop\ at\ } j) =
+#'   \psi_0 + \psi_1 (y_{j-1} - c) + \psi_2 (y_j - c).}
+#' MCAR, MAR and MNAR are the nested restrictions
+#' `psi1 = psi2 = 0`, `psi2 = 0`, and `psi2` free. MNAR therefore
+#' *extends* MAR rather than replacing its history dependence.
+#'
+#' At a visit with no predecessor there is no previously observed
+#' response to condition on, so the `psi1` term contributes nothing
+#' there rather than falling back on the current response, which would
+#' make a mechanism reported as MAR behave as MNAR at that visit.
+#'
+#' Centering at `c` matters: on an untransformed ADAS-Cog or CDR-SB
+#' scale an uncentered response saturates the logit, so that any
+#' non-trivial `psi1` drives the dropout proportion to one regardless
+#' of the intended level.
+#'
+#' Calibration solves for `psi0` such that the expected proportion of
+#' subjects ever missing equals `target`. Because the hazards depend
+#' only on complete-data responses, that expectation is available in
+#' closed form as `1 - prod(1 - p_j)` averaged over subjects, and is
+#' strictly increasing in `psi0`, so no inner Monte Carlo loop is
+#' needed. With `by` supplied, calibration is solved separately within
+#' each group.
+#' @seealso [apply_mask()] to apply the mask to data,
+#'   [mask_from_data()] to import an empirical pattern, and
+#'   [reference_based()] for post-discontinuation trajectories.
 #' @export
 dropout_mask <- function(dat,
                          target = 0.25,

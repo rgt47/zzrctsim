@@ -131,7 +131,7 @@ res <- run_simulation(
   B = 40,
   generate = function() generate_outcomes(d, gm, beta = b,
                                           intercept = 12),
-  analyse = list(ancova = function(z)
+  analyze = list(ancova = function(z)
     fit_ancova(z, reference = "placebo")),
   estimand = estimand("final contrast",
                       b[["x_trt_active"]] * max(s$time)),

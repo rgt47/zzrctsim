@@ -123,8 +123,15 @@ expect_error(generate_outcomes(d, gd, beta = c(nope = 1)),
 
 # ---- dropout ---------------------------------------------------------
 
+# Dropout is generated as a mask and then applied, which is the only
+# path since `apply_dropout()` was removed in favor of the composable
+# pair. `drop_out()` below is a local convenience so these tests read
+# as they did before.
+drop_out <- function(dat, ...) apply_mask(dat, dropout_mask(dat, ...))
+
 set.seed(7)
-dd <- apply_dropout(out, target = 0.30, from = 0)
+mk_dd <- dropout_mask(out, target = 0.30, from = 0)
+dd <- apply_mask(out, mk_dd)
 expect_true(any(is.na(dd$y)), info = 'dropout removes observations')
 expect_true(all(!is.na(dd$y[dd$time <= 0])),
             info = 'run-in and baseline visits are retained')
@@ -142,10 +149,13 @@ expect_equal(dropout_mechanism(0, 0.1), "MNAR",
 for (spec in list(c(0, 0), c(0.15, 0), c(0.15, 0.10), c(0, 0.10))) {
   for (tg in c(0.15, 0.35)) {
     set.seed(21)
-    z <- apply_dropout(out, target = tg,
+    mk <- dropout_mask(out, target = tg,
                        psi1 = spec[1], psi2 = spec[2], from = 0)
-    sp <- attr(z, "dropout_spec")
-    expect_equal(sp$expected, tg, tolerance = 1e-6,
+    z <- apply_mask(out, mk)
+    sp <- attr(mk, "spec")
+    # `expected` is named by the levels of `by`; with no `by` it is a
+    # single "all" entry.
+    expect_equal(unname(sp$expected[[1]]), tg, tolerance = 1e-6,
                  info = paste0('expected dropout matches target ', tg,
                                ' at psi1=', spec[1], ' psi2=', spec[2]))
     realized <- mean(tapply(z$y, z$id, function(v) any(is.na(v))))
@@ -155,10 +165,10 @@ for (spec in list(c(0, 0), c(0.15, 0), c(0.15, 0.10), c(0, 0.10))) {
   }
 }
 
-# Centring is what makes calibration stable on an untransformed scale.
-sp <- attr(apply_dropout(out, target = 0.25, psi1 = 0.15), "dropout_spec")
+# Centering is what makes calibration stable on an untransformed scale.
+sp <- attr(dropout_mask(out, target = 0.25, psi1 = 0.15), "spec")
 expect_equal(sp$center, mean(out$y), tolerance = 1e-10,
-             info = 'default centring is the complete-data mean')
+             info = 'default centering is the complete-data mean')
 
 # Monotone: once dropped, dropped thereafter.
 mono <- tapply(seq_len(nrow(dd)), dd$id, function(k) {
@@ -186,7 +196,7 @@ risk_set <- function(complete, realized, from = 0) {
 }
 
 set.seed(11)
-mar <- apply_dropout(out, target = 0.30, psi1 = 0.20, from = 0)
+mar <- drop_out(out, target = 0.30, psi1 = 0.20, from = 0)
 pm <- risk_set(out, mar)
 fit_mar <- stats::glm(drop_next ~ prev, data = pm,
                       family = stats::binomial())
@@ -198,7 +208,7 @@ expect_true(mean(tapply(mar$y, mar$id, function(v) any(is.na(v)))) < 0.45,
             info = 'MAR dropout stays near its target, not saturated')
 
 set.seed(11)
-mc <- apply_dropout(out, target = 0.30, from = 0)
+mc <- drop_out(out, target = 0.30, from = 0)
 pc <- risk_set(out, mc)
 fit_mc <- stats::glm(drop_next ~ prev, data = pc,
                      family = stats::binomial())
@@ -209,9 +219,9 @@ expect_true(ci[1] <= 0 && ci[2] >= 0,
 # MNAR nests MAR: with psi1 held fixed, adding psi2 must not remove the
 # history dependence. This is the defect the old parameterization had.
 set.seed(11)
-mnar <- apply_dropout(out, target = 0.30, psi1 = 0.20, psi2 = 0.10,
-                      from = 0)
-sp_mnar <- attr(mnar, "dropout_spec")
+mk_mnar <- dropout_mask(out, target = 0.30, psi1 = 0.20, psi2 = 0.10,
+                        from = 0)
+sp_mnar <- attr(mk_mnar, "spec")
 expect_equal(sp_mnar$psi1, 0.20,
              info = 'MNAR retains the psi1 history term')
 expect_equal(sp_mnar$mechanism, "MNAR", info = 'psi2 makes it MNAR')

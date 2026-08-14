@@ -77,7 +77,7 @@ sim_streams <- function(n, seed) {
 #' bt <- c(x_slope = 0.5, x_trt_active = -0.25)
 #' gen <- function() generate_outcomes(d, g, beta = bt, intercept = 20)
 #'
-#' res <- run_simulation(B = 10, generate = gen, analyse = fit_ancova,
+#' res <- run_simulation(B = 10, generate = gen, analyze = fit_ancova,
 #'                       estimand = estimand("change diff", -3))
 #'
 #' # Re-execute replicate 3 in isolation and recover its estimate.

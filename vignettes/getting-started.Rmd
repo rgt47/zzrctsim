@@ -86,7 +86,7 @@ Any analysis method may be used, provided it returns a `fit_result()`.
 `fit_ancova()` is supplied as a reference: change from baseline at the
 final visit, adjusted for the baseline value.
 
-```{r analyse}
+```{r analyze}
 fit_ancova(dat, reference = "placebo")
 ```
 
@@ -116,7 +116,7 @@ res <- run_simulation(
   B = 200,
   generate = function() generate_outcomes(d, g, beta = b,
                                           intercept = 20),
-  analyse = list(ancova = function(z)
+  analyze = list(ancova = function(z)
     fit_ancova(z, reference = "placebo")),
   estimand = estimand("final-visit contrast", theta),
   seed = 42L
@@ -139,7 +139,7 @@ nsim_for_mcse("proportion", mcse = 0.01, p = 0.8)
 
 ## Comparing methods on the same data
 
-Passing several fitters analyses the *identical* data set with each,
+Passing several fitters analyzes the *identical* data set with each,
 which is the paired comparison Morris et al. recommend. The estimates
 are then correlated, and the comparison is not contaminated by
 between-dataset variation.
@@ -149,7 +149,7 @@ res2 <- run_simulation(
   B = 100,
   generate = function() generate_outcomes(d, g, beta = b,
                                           intercept = 20),
-  analyse = list(
+  analyze = list(
     ancova = function(z) fit_ancova(z, reference = "placebo"),
     final_only = fit_lm_final),
   estimand = estimand("final-visit contrast", theta),

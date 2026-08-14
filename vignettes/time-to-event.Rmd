@@ -200,7 +200,7 @@ c(hazard_ratio = round(exp(unname(coef(fd))), 3),
   p = signif(summary(fd)$coefficients[1, "Pr(>|z|)"], 3))
 ```
 
-It is a compact demonstration of why a survival endpoint is analysed
+It is a compact demonstration of why a survival endpoint is analyzed
 through the hazard rather than through the mean event time of the
 subset that had events.
 

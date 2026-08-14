@@ -57,7 +57,7 @@ res <- run_simulation(
   B = 200,
   generate = function() generate_outcomes(d, g, beta = b,
                                           intercept = 20),
-  analyse = list(ancova = function(z)
+  analyze = list(ancova = function(z)
     fit_ancova(z, reference = "placebo")),
   estimand = estimand("final-visit contrast", theta),
   seed = 42L
@@ -87,7 +87,7 @@ sample_size(
   target = 0.80, n_grid = c(50, 100, 150, 200),
   design_fn = design_fn, dgm = g, beta = b, intercept = 20,
   estimand = estimand("final contrast", theta),
-  analyse = list(ancova = function(z)
+  analyze = list(ancova = function(z)
     fit_ancova(z, reference = "placebo")),
   B = 300L, seed = 5L
 )

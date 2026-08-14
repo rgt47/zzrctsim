@@ -174,17 +174,17 @@ fit_ancova <- function(dat, visit_time = NULL, reference = NULL,
 #' @param B Integer. Number of replicates.
 #' @param generate Function of no arguments returning one simulated
 #'   data set.
-#' @param analyse Function of a data set returning a [fit_result()], or
+#' @param analyze Function of a data set returning a [fit_result()], or
 #'   a named list of such functions to compare methods on the *same*
 #'   data (common random numbers).
 #' @param estimand An [estimand()].
 #' @param seed Integer. Master seed.
 #' @return An object of class `c("sim_results", "data.frame")` with
-#'   `B * length(analyse)` rows, one per replicate and method, and
+#'   `B * length(analyze)` rows, one per replicate and method, and
 #'   columns
 #'   \describe{
 #'     \item{rep}{replicate index, `1` to `B`}
-#'     \item{method}{the name of the element of `analyse` that produced
+#'     \item{method}{the name of the element of `analyze` that produced
 #'       the row}
 #'     \item{estimate, se, p_value, ci_lower, ci_upper, converged}{the
 #'       corresponding elements of that method's [fit_result()]}
@@ -199,17 +199,17 @@ fit_ancova <- function(dat, visit_time = NULL, reference = NULL,
 #'     \item{B}{the number of replicates}
 #'     \item{errors}{a character vector of trapped error messages, each
 #'       tagged with its replicate number and whether it arose in
-#'       `generate` or `analyse`. Empty when every replicate succeeded,
+#'       `generate` or `analyze`. Empty when every replicate succeeded,
 #'       and reported by the `print` method when not.}
 #'   }
 #' @details
-#' Errors and warnings inside `generate` or `analyse` are trapped: the
+#' Errors and warnings inside `generate` or `analyze` are trapped: the
 #' replicate is recorded as non-converged rather than aborting the run,
 #' and the message is retained in the `errors` attribute. Because the
 #' RNG state for every replicate is stored, a failing replicate can be
 #' reproduced exactly with [with_rng_state()].
 #'
-#' Passing several methods analyses the identical data set with each,
+#' Passing several methods analyzes the identical data set with each,
 #' which is the paired comparison Morris et al. recommend.
 #' @examples
 #' sch <- trial_schedule(treatment = 4, interval = 3)
@@ -224,32 +224,32 @@ fit_ancova <- function(dat, visit_time = NULL, reference = NULL,
 #'   generate = function() {
 #'     generate_outcomes(d, g, beta = bt, intercept = 20)
 #'   },
-#'   analyse = fit_ancova,
+#'   analyze = fit_ancova,
 #'   estimand = estimand("difference in change at month 12", -3))
 #' res
 #' head(compute_performance(res), 4)
 #' @export
-run_simulation <- function(B, generate, analyse, estimand,
+run_simulation <- function(B, generate, analyze, estimand,
                            seed = 20260810L) {
   stopifnot(B >= 1, is.function(generate))
-  if (is.function(analyse)) analyse <- list(method = analyse)
-  if (!is.list(analyse) || !length(analyse)) {
-    stop("`analyse` must be a function or a non-empty list of ",
+  if (is.function(analyze)) analyze <- list(method = analyze)
+  if (!is.list(analyze) || !length(analyze)) {
+    stop("`analyze` must be a function or a non-empty list of ",
          "functions, one per analysis method.")
   }
   # Every element must be named, not merely some: results are collected
   # by name, so an unnamed element is silently dropped and surfaces
   # later as a confusing row-count mismatch.
-  nms <- names(analyse)
-  unnamed <- if (is.null(nms)) seq_along(analyse) else which(!nzchar(nms))
+  nms <- names(analyze)
+  unnamed <- if (is.null(nms)) seq_along(analyze) else which(!nzchar(nms))
   if (length(unnamed)) {
-    stop("`analyse` must be a fully named list; element(s) ",
+    stop("`analyze` must be a fully named list; element(s) ",
          paste(unnamed, collapse = ", "), " have no name.")
   }
-  if (!all(vapply(analyse, is.function, logical(1)))) {
-    stop("Every element of `analyse` must be a function; ",
+  if (!all(vapply(analyze, is.function, logical(1)))) {
+    stop("Every element of `analyze` must be a function; ",
          "element(s) ",
-         paste(names(analyse)[!vapply(analyse, is.function,
+         paste(names(analyze)[!vapply(analyze, is.function,
                                       logical(1))],
                collapse = ", "), " are not.")
   }
@@ -270,13 +270,13 @@ run_simulation <- function(B, generate, analyse, estimand,
         log$errors <- c(log$errors,
                         paste0("rep ", b, " generate: ",
                                conditionMessage(dat)))
-        lapply(analyse, function(f) null_fit())
+        lapply(analyze, function(f) null_fit())
       } else {
-        lapply(analyse, function(f) {
+        lapply(analyze, function(f) {
           out <- tryCatch(f(dat), error = function(e) e)
           if (inherits(out, "error")) {
             log$errors <- c(log$errors,
-                            paste0("rep ", b, " analyse: ",
+                            paste0("rep ", b, " analyze: ",
                                    conditionMessage(out)))
             null_fit()
           } else out

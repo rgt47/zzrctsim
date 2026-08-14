@@ -28,8 +28,10 @@ the levels of \code{by} for group-specific targets.}
 instead of calibrating from \code{target}. May be named by the levels
 of \code{by}.}
 
-\item{psi1, psi2}{Numeric. Coefficients on the previous and current
-centered response. See \code{\link[=apply_dropout]{apply_dropout()}}.}
+\item{psi1, psi2}{Numeric. Coefficients on the previously observed
+and the current, unobserved response, each centered at \code{center}.
+Non-zero \code{psi1} gives MAR; non-zero \code{psi2} gives MNAR. See
+Details.}
 
 \item{psi_cov}{Named numeric vector of coefficients on additional
 columns of \code{dat}, giving covariate-dependent missingness. Columns
@@ -55,4 +57,36 @@ Draws a missingness pattern from a Diggle-Kenward selection model.
 The mask is a first-class object: save it, inspect it, reuse it
 across replicates, or apply it to a different data set with the same
 design.
+}
+\details{
+The hazard follows Diggle and Kenward (1994) \doi{10.2307/2986113}:
+for a subject still under observation at visit \code{j},
+\deqn{\mathrm{logit}\, P(\mathrm{drop\ at\ } j) =
+  \psi_0 + \psi_1 (y_{j-1} - c) + \psi_2 (y_j - c).}
+MCAR, MAR and MNAR are the nested restrictions
+\code{psi1 = psi2 = 0}, \code{psi2 = 0}, and \code{psi2} free. MNAR therefore
+\emph{extends} MAR rather than replacing its history dependence.
+
+At a visit with no predecessor there is no previously observed
+response to condition on, so the \code{psi1} term contributes nothing
+there rather than falling back on the current response, which would
+make a mechanism reported as MAR behave as MNAR at that visit.
+
+Centering at \code{c} matters: on an untransformed ADAS-Cog or CDR-SB
+scale an uncentered response saturates the logit, so that any
+non-trivial \code{psi1} drives the dropout proportion to one regardless
+of the intended level.
+
+Calibration solves for \code{psi0} such that the expected proportion of
+subjects ever missing equals \code{target}. Because the hazards depend
+only on complete-data responses, that expectation is available in
+closed form as \code{1 - prod(1 - p_j)} averaged over subjects, and is
+strictly increasing in \code{psi0}, so no inner Monte Carlo loop is
+needed. With \code{by} supplied, calibration is solved separately within
+each group.
+}
+\seealso{
+\code{\link[=apply_mask]{apply_mask()}} to apply the mask to data,
+\code{\link[=mask_from_data]{mask_from_data()}} to import an empirical pattern, and
+\code{\link[=reference_based]{reference_based()}} for post-discontinuation trajectories.
 }

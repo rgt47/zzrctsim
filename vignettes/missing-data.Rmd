@@ -195,7 +195,7 @@ run <- function(drop) {
   }
   res <- run_simulation(
     B = 150, generate = gen,
-    analyse = list(a = function(z) fit_ancova(z, reference = "placebo")),
+    analyze = list(a = function(z) fit_ancova(z, reference = "placebo")),
     estimand = estimand("final contrast",
                         b[["x_trt_active"]] * max(s$time)),
     seed = 4L)

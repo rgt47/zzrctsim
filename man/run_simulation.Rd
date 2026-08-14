@@ -4,7 +4,7 @@
 \alias{run_simulation}
 \title{Run a simulation study}
 \usage{
-run_simulation(B, generate, analyse, estimand, seed = 20260810L)
+run_simulation(B, generate, analyze, estimand, seed = 20260810L)
 }
 \arguments{
 \item{B}{Integer. Number of replicates.}
@@ -12,7 +12,7 @@ run_simulation(B, generate, analyse, estimand, seed = 20260810L)
 \item{generate}{Function of no arguments returning one simulated
 data set.}
 
-\item{analyse}{Function of a data set returning a \code{\link[=fit_result]{fit_result()}}, or
+\item{analyze}{Function of a data set returning a \code{\link[=fit_result]{fit_result()}}, or
 a named list of such functions to compare methods on the \emph{same}
 data (common random numbers).}
 
@@ -22,11 +22,11 @@ data (common random numbers).}
 }
 \value{
 An object of class \code{c("sim_results", "data.frame")} with
-\code{B * length(analyse)} rows, one per replicate and method, and
+\code{B * length(analyze)} rows, one per replicate and method, and
 columns
 \describe{
 \item{rep}{replicate index, \code{1} to \code{B}}
-\item{method}{the name of the element of \code{analyse} that produced
+\item{method}{the name of the element of \code{analyze} that produced
 the row}
 \item{estimate, se, p_value, ci_lower, ci_upper, converged}{the
 corresponding elements of that method's \code{\link[=fit_result]{fit_result()}}}
@@ -41,7 +41,7 @@ replay with \code{\link[=with_rng_state]{with_rng_state()}}}
 \item{B}{the number of replicates}
 \item{errors}{a character vector of trapped error messages, each
 tagged with its replicate number and whether it arose in
-\code{generate} or \code{analyse}. Empty when every replicate succeeded,
+\code{generate} or \code{analyze}. Empty when every replicate succeeded,
 and reported by the \code{print} method when not.}
 }
 }
@@ -50,13 +50,13 @@ Drives the replicate loop, storing per-replicate estimates together
 with the RNG state that produced them.
 }
 \details{
-Errors and warnings inside \code{generate} or \code{analyse} are trapped: the
+Errors and warnings inside \code{generate} or \code{analyze} are trapped: the
 replicate is recorded as non-converged rather than aborting the run,
 and the message is retained in the \code{errors} attribute. Because the
 RNG state for every replicate is stored, a failing replicate can be
 reproduced exactly with \code{\link[=with_rng_state]{with_rng_state()}}.
 
-Passing several methods analyses the identical data set with each,
+Passing several methods analyzes the identical data set with each,
 which is the paired comparison Morris et al. recommend.
 }
 \examples{
@@ -72,7 +72,7 @@ res <- run_simulation(
   generate = function() {
     generate_outcomes(d, g, beta = bt, intercept = 20)
   },
-  analyse = fit_ancova,
+  analyze = fit_ancova,
   estimand = estimand("difference in change at month 12", -3))
 res
 head(compute_performance(res), 4)

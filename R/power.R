@@ -19,8 +19,8 @@
 #'   frame, as from [runin_design()].
 #' @param dgm A `dgm`.
 #' @param beta Named fixed-effect vector, as for [generate_outcomes()].
+#' @param analyze A fitter, or named list of fitters.
 #' @param estimand An [estimand()].
-#' @param analyse A fitter, or named list of fitters.
 #' @param B Integer. Replicates.
 #' @param alpha Numeric. Two-sided significance level.
 #' @param intercept Numeric. The overall mean at time zero, passed to
@@ -31,12 +31,12 @@
 #' @param dropout Optional list of arguments passed to
 #'   [dropout_mask()], applied to each replicate.
 #' @param seed Integer. Master seed.
-#' @return A data frame with one row per method in `analyse` and
+#' @return A data frame with one row per method in `analyze` and
 #'   columns
 #'   \describe{
 #'     \item{n_per_arm}{the sample size evaluated, repeated down the
 #'       rows}
-#'     \item{method}{the fitter name; `"method"` when `analyse` was a
+#'     \item{method}{the fitter name; `"method"` when `analyze` was a
 #'       bare function rather than a named list}
 #'     \item{power}{the proportion of replicates with `p < alpha`, that
 #'       is the `rejection` measure from [compute_performance()]. It is
@@ -59,13 +59,16 @@
 #'
 #' # B is far too small for a real study; see `nsim_for_mcse()`.
 #' sim_power(n_per_arm = 30, design_fn = design_fn, dgm = g,
-#'           beta = bt, estimand = es, analyse = fit_ancova,
+#'           beta = bt, estimand = es, analyze = fit_ancova,
 #'           B = 20, intercept = 20)
 #' @export
-sim_power <- function(n_per_arm, design_fn, dgm, beta, estimand,
-                      analyse, B = 500L, alpha = 0.05,
+sim_power <- function(n_per_arm, design_fn, dgm, beta,
+                      analyze, estimand, B = 500L, alpha = 0.05,
                       intercept = 0, dropout = NULL,
                       seed = 20260810L) {
+  # Argument order follows the ADEMP flow that `run_simulation()` uses
+  # -- generate, then analyze, then the estimand they are judged
+  # against -- so the two functions read the same way.
   d <- design_fn(n_per_arm)
   gen <- function() {
     z <- generate_outcomes(d, dgm, beta = beta, intercept = intercept)
@@ -75,7 +78,7 @@ sim_power <- function(n_per_arm, design_fn, dgm, beta, estimand,
     }
     z
   }
-  res <- run_simulation(B, gen, analyse, estimand, seed = seed)
+  res <- run_simulation(B, gen, analyze, estimand, seed = seed)
   perf <- compute_performance(res, alpha = alpha)
   keep <- perf$measure == "rejection"
   data.frame(n_per_arm = n_per_arm,
@@ -91,7 +94,7 @@ sim_power <- function(n_per_arm, design_fn, dgm, beta, estimand,
 #' @param ... Passed to [sim_power()].
 #' @return An object of class `c("power_curve", "data.frame")`: the
 #'   [sim_power()] results row-bound over `n_grid`, so
-#'   `length(n_grid) * length(analyse)` rows with the same four
+#'   `length(n_grid) * length(analyze)` rows with the same four
 #'   columns
 #'   \describe{
 #'     \item{n_per_arm}{the per-arm sample size for the row}
@@ -115,7 +118,7 @@ sim_power <- function(n_per_arm, design_fn, dgm, beta, estimand,
 #' power_curve(n_grid = c(30, 60), design_fn = design_fn, dgm = g,
 #'             beta = c(x_slope = 0.5, x_trt_active = -0.25),
 #'             estimand = estimand("change difference", -3),
-#'             analyse = fit_ancova, B = 20)
+#'             analyze = fit_ancova, B = 20)
 #' @export
 power_curve <- function(n_grid, ...) {
   out <- do.call(rbind, lapply(n_grid, function(n) {
@@ -179,10 +182,10 @@ sample_size <- function(target = 0.80, n_grid, confirm_B = 2000L, ...) {
   # meaningful for one method, and running the whole grid first would
   # make the user pay for the entire study before being told the call
   # was invalid.
-  if (is.list(dots$analyse) && length(dots$analyse) > 1L) {
-    stop("`sample_size()` expects a single method; `analyse` has ",
-         length(dots$analyse), ": ",
-         paste(names(dots$analyse), collapse = ", "),
+  if (is.list(dots$analyze) && length(dots$analyze) > 1L) {
+    stop("`sample_size()` expects a single method; `analyze` has ",
+         length(dots$analyze), ": ",
+         paste(names(dots$analyze), collapse = ", "),
          ". Call it once per method.")
   }
   curve <- do.call(power_curve, c(list(n_grid = n_grid), dots))

@@ -166,7 +166,7 @@ if (length(never)) {
 # and 25% of active cross, a Cox hazard ratio of 0.29, yet the mean
 # time among crossers is 12.36 against 12.16 -- indistinguishable.
 #
-# This is why a survival endpoint is analysed through the hazard with
+# This is why a survival endpoint is analyzed through the hazard with
 # censored observations retained, not through the mean event time of
 # the subset that had events. It is also precisely the comparison
 # compendium 13 exists to study.

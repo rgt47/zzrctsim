@@ -74,7 +74,7 @@ ss <- sample_size(
   design_fn = design_fn, dgm = g, beta = b, intercept = 20,
   estimand = estimand("final contrast",
                       b[["x_trt_active"]] * max(s$time)),
-  analyse = list(ancova = function(z)
+  analyze = list(ancova = function(z)
     fit_ancova(z, reference = "placebo")),
   B = 300L, seed = 5L)
 ss
@@ -180,7 +180,7 @@ ss_drop <- sample_size(
   design_fn = design_fn, dgm = g, beta = b, intercept = 20,
   estimand = estimand("final contrast",
                       b[["x_trt_active"]] * max(s$time)),
-  analyse = list(ancova = function(z)
+  analyze = list(ancova = function(z)
     fit_ancova(z, reference = "placebo")),
   dropout = list(target = 0.30, psi1 = 0.10),
   B = 300L, seed = 5L)

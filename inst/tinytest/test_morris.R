@@ -64,7 +64,7 @@ gen <- function() {
 res <- run_simulation(
   B = 200,
   generate = gen,
-  analyse = list(ancova = function(z) fit_ancova(z, reference = "placebo")),
+  analyze = list(ancova = function(z) fit_ancova(z, reference = "placebo")),
   estimand = estimand("final-visit contrast", theta),
   seed = 7L
 )
@@ -137,7 +137,7 @@ res0 <- run_simulation(
   B = 400,
   generate = function() generate_outcomes(d, gd, beta = b_null,
                                           intercept = 20),
-  analyse = list(ancova = function(z)
+  analyze = list(ancova = function(z)
     fit_ancova(z, reference = "placebo")),
   estimand = estimand("null contrast", 0), seed = 11L
 )
@@ -152,7 +152,7 @@ expect_true(abs(t1 - 0.05) < 3 * t1_mcse,
 bad <- run_simulation(
   B = 10,
   generate = function() stop("deliberate failure"),
-  analyse = list(m = function(z) fit_ancova(z)),
+  analyze = list(m = function(z) fit_ancova(z)),
   estimand = estimand("x", 0), seed = 1L
 )
 expect_equal(sum(bad$converged), 0L,
@@ -166,7 +166,7 @@ expect_equal(length(attr(bad, "errors")), 10L,
 # estimates are paired.
 res_cmp <- run_simulation(
   B = 100, generate = gen,
-  analyse = list(
+  analyze = list(
     full = function(z) fit_ancova(z, reference = "placebo"),
     mid = function(z) fit_ancova(z, visit_time = 6,
                                  reference = "placebo")),

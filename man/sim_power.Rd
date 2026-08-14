@@ -9,8 +9,8 @@ sim_power(
   design_fn,
   dgm,
   beta,
+  analyze,
   estimand,
-  analyse,
   B = 500L,
   alpha = 0.05,
   intercept = 0,
@@ -28,9 +28,9 @@ frame, as from \code{\link[=runin_design]{runin_design()}}.}
 
 \item{beta}{Named fixed-effect vector, as for \code{\link[=generate_outcomes]{generate_outcomes()}}.}
 
-\item{estimand}{An \code{\link[=estimand]{estimand()}}.}
+\item{analyze}{A fitter, or named list of fitters.}
 
-\item{analyse}{A fitter, or named list of fitters.}
+\item{estimand}{An \code{\link[=estimand]{estimand()}}.}
 
 \item{B}{Integer. Replicates.}
 
@@ -48,12 +48,12 @@ given a realistic value whenever \code{dropout} is used.}
 \item{seed}{Integer. Master seed.}
 }
 \value{
-A data frame with one row per method in \code{analyse} and
+A data frame with one row per method in \code{analyze} and
 columns
 \describe{
 \item{n_per_arm}{the sample size evaluated, repeated down the
 rows}
-\item{method}{the fitter name; \code{"method"} when \code{analyse} was a
+\item{method}{the fitter name; \code{"method"} when \code{analyze} was a
 bare function rather than a named list}
 \item{power}{the proportion of replicates with \code{p < alpha}, that
 is the \code{rejection} measure from \code{\link[=compute_performance]{compute_performance()}}. It is
@@ -80,6 +80,6 @@ es <- estimand("difference in change at month 12", -3)
 
 # B is far too small for a real study; see `nsim_for_mcse()`.
 sim_power(n_per_arm = 30, design_fn = design_fn, dgm = g,
-          beta = bt, estimand = es, analyse = fit_ancova,
+          beta = bt, estimand = es, analyze = fit_ancova,
           B = 20, intercept = 20)
 }

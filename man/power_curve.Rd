@@ -14,7 +14,7 @@ power_curve(n_grid, ...)
 \value{
 An object of class \code{c("power_curve", "data.frame")}: the
 \code{\link[=sim_power]{sim_power()}} results row-bound over \code{n_grid}, so
-\code{length(n_grid) * length(analyse)} rows with the same four
+\code{length(n_grid) * length(analyze)} rows with the same four
 columns
 \describe{
 \item{n_per_arm}{the per-arm sample size for the row}
@@ -42,5 +42,5 @@ g <- dgm_conditional(G = diag(c(9, 0.04)), sigma2 = 4)
 power_curve(n_grid = c(30, 60), design_fn = design_fn, dgm = g,
             beta = c(x_slope = 0.5, x_trt_active = -0.25),
             estimand = estimand("change difference", -3),
-            analyse = fit_ancova, B = 20)
+            analyze = fit_ancova, B = 20)
 }
