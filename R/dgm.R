@@ -48,7 +48,14 @@ NULL
 #'   lag-based form on an equally spaced grid.
 #' @export
 cov_ar1 <- function(sd = 1, rho = 0.6) {
-  stopifnot(rho > 0, rho < 1)
+  if (length(rho) != 1L || !is.numeric(rho) || is.na(rho) ||
+      rho <= 0 || rho >= 1) {
+    stop("`rho` must be a single number strictly between 0 and 1, but ",
+         "it is ", paste(format(rho), collapse = ", "),
+         ". The continuous-time AR(1) correlation is `rho^|t_i - t_j|`, ",
+         "which is defined only for a positive `rho` below 1; use ",
+         "`cov_cs()` if you need a negative correlation.")
+  }
   function(t) {
     s <- .sd_at(sd, t)
     diag(s, nrow = length(s)) %*%
@@ -60,7 +67,13 @@ cov_ar1 <- function(sd = 1, rho = 0.6) {
 #' @rdname cov_structures
 #' @export
 cov_cs <- function(sd = 1, rho = 0.5) {
-  stopifnot(rho > -1, rho < 1)
+  if (length(rho) != 1L || !is.numeric(rho) || is.na(rho) ||
+      rho <= -1 || rho >= 1) {
+    stop("`rho` must be a single number strictly between -1 and 1, but ",
+         "it is ", paste(format(rho), collapse = ", "),
+         ". Outside that range the compound-symmetric matrix is not ",
+         "positive definite. Supply a correlation, not a covariance.")
+  }
   function(t) {
     s <- .sd_at(sd, t)
     R <- matrix(rho, length(t), length(t))
@@ -147,7 +160,19 @@ dgm_conditional <- function(G, sigma2 = NULL,
                             family = stats::gaussian(),
                             trials = 1L, theta = NULL) {
   G <- as.matrix(G)
-  stopifnot(nrow(G) == ncol(G), is.function(z))
+  if (nrow(G) != ncol(G)) {
+    stop("`G` must be a square random-effects covariance, but it is ",
+         nrow(G), " x ", ncol(G),
+         ". Supply a `q x q` matrix, or a scalar for a single random ",
+         "effect.")
+  }
+  if (!is.function(z)) {
+    stop("`z` must be a function of a time vector returning the ",
+         "n x q random-effects design, but it is of class ",
+         paste(class(z), collapse = "/"),
+         ". For a random intercept and slope use ",
+         "`function(t) cbind(1, t)`.")
+  }
   if (is.character(family)) family <- get(family, mode = "function")()
   if (is.function(family)) family <- family()
   if (!inherits(family, "family")) {
@@ -167,7 +192,14 @@ dgm_conditional <- function(G, sigma2 = NULL,
     if (is.null(sigma2)) {
       stop("`sigma2` is required for the Gaussian family.")
     }
-    stopifnot(sigma2 >= 0)
+    if (length(sigma2) != 1L || !is.numeric(sigma2) ||
+        is.na(sigma2) || sigma2 < 0) {
+      stop("`sigma2` must be a single non-negative number, the ",
+           "residual *variance*, but it is ",
+           paste(format(sigma2), collapse = ", "),
+           ". Supply a variance rather than a standard deviation, and ",
+           "use 0 for a noise-free response.")
+    }
   } else if (is.null(sigma2)) {
     sigma2 <- NA_real_
   }
@@ -221,7 +253,17 @@ dgm_marginal <- function(V, times = NULL) {
     stop("`times` is required when `V` is a matrix; it identifies ",
          "the grid the matrix refers to.")
   }
-  stopifnot(nrow(V) == length(times))
+  if (nrow(V) != ncol(V)) {
+    stop("`V` must be a square covariance matrix, but it is ",
+         nrow(V), " x ", ncol(V), ".")
+  }
+  if (nrow(V) != length(times)) {
+    stop("`V` is ", nrow(V), " x ", ncol(V), " but `times` has ",
+         length(times), " element(s); they must agree, since `times` ",
+         "identifies the grid each row and column of `V` refers to. ",
+         "Supply one time per row of `V`, or give `V` as a function ",
+         "of time.")
+  }
   if (!isSymmetric(unname(V), tol = sqrt(.Machine$double.eps))) {
     stop("`V` must be symmetric.")
   }
@@ -286,7 +328,13 @@ cov_at.dgm_conditional <- function(dgm, times) {
 #' linpred_cov(g, times = c(0, 3, 6))
 #' @export
 linpred_cov <- function(dgm, times) {
-  stopifnot(inherits(dgm, "dgm_conditional"))
+  if (!inherits(dgm, "dgm_conditional")) {
+    stop("`dgm` must be a `dgm_conditional`, but it has class ",
+         paste(class(dgm), collapse = "/"),
+         ". `Z G Z'` is defined only for the conditional ",
+         "parameterization; a marginal DGM has no random effects. ",
+         "Use `as_conditional()` first, or `cov_at()` instead.")
+  }
   .zgz(dgm, times)
 }
 
@@ -327,9 +375,12 @@ as_marginal <- function(dgm, times) {
 #' @param dgm A `dgm`.
 #' @param times Grid on which to evaluate.
 #' @param q Integer. Random-effects budget. Defaults to the minimum
-#'   required.
+#'   required. A `q` below `q_min` is an error; a `q` above it warns and
+#'   is ignored, since the certified construction is already exact at
+#'   `q_min` and further random effects would carry zero variance.
 #' @return A `dgm_conditional` whose `z()` returns the certified
-#'   loadings on `times`.
+#'   loadings on `times`, and whose `q` is always `q_min` regardless of
+#'   the budget supplied.
 #' @export
 as_conditional <- function(dgm, times, q = NULL) {
   V <- cov_at(dgm, times)
@@ -342,6 +393,20 @@ as_conditional <- function(dgm, times, q = NULL) {
          ".\n  Best attainable relative Frobenius error at q = ", q,
          " is ", format(err$rel_frobenius, digits = 3),
          ".\n  Use `reach_error()` to inspect, or raise `q`.")
+  }
+  # A budget above `q_min` is honored by *using less of it*: the
+  # certificate is the minimal exact construction, and padding `Z` and
+  # `G` with zero columns would add random effects with zero variance,
+  # which are not estimable and change nothing. Say so rather than let
+  # the returned `q` silently contradict the argument.
+  if (q > cert$q_min) {
+    warning("`q` = ", q, " exceeds the minimum required, q_min = ",
+            cert$q_min, ", and has no effect: the returned ",
+            "`dgm_conditional` will have q = ", cert$q_min,
+            ". The certified construction is already exact at q_min, ",
+            "so the extra random effect(s) would carry zero variance. ",
+            "Omit `q` to accept the minimum.")
+    q <- cert$q_min
   }
   Zc <- cert$Z
   dgm_conditional(

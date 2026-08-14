@@ -69,7 +69,17 @@
 #' @export
 dgm_mixture <- function(components, weights = NULL,
                         mean_shift = NULL) {
-  stopifnot(is.list(components), length(components) >= 2)
+  if (!is.list(components)) {
+    stop("`components` must be a list of `dgm` objects, but it is of ",
+         "class ", paste(class(components), collapse = "/"),
+         ". Wrap a single object as `list(x, y)`.")
+  }
+  if (length(components) < 2L) {
+    stop("`components` must hold at least 2 mixture components, but ",
+         "it holds ", length(components),
+         ". A one-component mixture is just that component; use it ",
+         "directly instead of wrapping it in `dgm_mixture()`.")
+  }
   if (!all(vapply(components, inherits, logical(1), "dgm"))) {
     stop("every element of `components` must be a `dgm` object.")
   }
@@ -80,7 +90,20 @@ dgm_mixture <- function(components, weights = NULL,
   K <- length(components)
 
   if (is.null(weights)) weights <- rep(1 / K, K)
-  stopifnot(length(weights) == K, all(weights > 0))
+  if (!is.numeric(weights) || length(weights) != K) {
+    stop("`weights` must be a numeric vector with one mixing ",
+         "probability per component, so length ", K, ", but it has ",
+         "length ", length(weights),
+         ". Omit `weights` for equal weights.")
+  }
+  if (anyNA(weights) || any(weights <= 0)) {
+    stop("`weights` must all be strictly positive and non-missing, ",
+         "but ", sum(is.na(weights) | weights <= 0),
+         " of ", K, " are not (minimum ",
+         format(min(weights, na.rm = TRUE), digits = 4),
+         "). A component with zero weight is never drawn; drop it ",
+         "from `components` instead.")
+  }
   if (abs(sum(weights) - 1) > 1e-8) {
     stop("`weights` must sum to 1; they sum to ",
          format(sum(weights), digits = 8), ".")
@@ -89,15 +112,37 @@ dgm_mixture <- function(components, weights = NULL,
   if (is.null(mean_shift)) {
     mean_shift <- rep(list(function(t) rep(0, length(t))), K)
   } else if (is.numeric(mean_shift)) {
-    stopifnot(length(mean_shift) == K)
+    if (length(mean_shift) != K) {
+      stop("`mean_shift` must have one entry per component, so length ",
+           K, ", but it has length ", length(mean_shift),
+           ". Supply one constant shift per component, or a list of ",
+           K, " functions of time.")
+    }
     consts <- as.list(mean_shift)
     mean_shift <- lapply(consts, function(cst) {
       force(cst)
       function(t) rep(cst, length(t))
     })
   } else {
-    stopifnot(is.list(mean_shift), length(mean_shift) == K,
-              all(vapply(mean_shift, is.function, logical(1))))
+    if (!is.list(mean_shift)) {
+      stop("`mean_shift` must be NULL, a numeric vector of length ", K,
+           ", or a list of ", K, " functions of the time vector, but ",
+           "it is of class ",
+           paste(class(mean_shift), collapse = "/"), ".")
+    }
+    if (length(mean_shift) != K) {
+      stop("`mean_shift` must have one entry per component, so length ",
+           K, ", but it has length ", length(mean_shift), ".")
+    }
+    bad <- which(!vapply(mean_shift, is.function, logical(1)))
+    if (length(bad)) {
+      stop("`mean_shift` given as a list must contain only functions ",
+           "of the time vector, but element(s) ",
+           paste(bad, collapse = ", "),
+           " are not functions. Use `function(t) 0.4 * t` for a shift ",
+           "in slope, or supply a plain numeric vector for constant ",
+           "shifts.")
+    }
   }
 
   structure(list(components = components, weights = weights,

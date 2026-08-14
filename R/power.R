@@ -217,11 +217,37 @@ sample_size <- function(target = 0.80, n_grid, confirm_B = 2000L, ...) {
             "returned size is an upper bound; extend `n_grid` ",
             "downward for a sharper answer.")
   } else {
-    # Monotone interpolation of n as a function of power.
+    # A simulated power curve is not guaranteed monotone: Monte Carlo
+    # error can put a dip in it, and `approx()` will interpolate
+    # straight through that dip and return a size from a region where
+    # power decreases in n. Say so rather than answering silently.
+    by_n <- curve[order(curve$n_per_arm), ]
+    if (is.unsorted(by_n$power)) {
+      warning("The simulated power curve is not monotone in ",
+              "`n_per_arm` (powers ",
+              paste(format(by_n$power, digits = 3), collapse = ", "),
+              " at sizes ",
+              paste(by_n$n_per_arm, collapse = ", "),
+              "). This is Monte Carlo error; the interpolated size is ",
+              "correspondingly uncertain. Raise `B`, or widen the ",
+              "spacing of `n_grid`.")
+    }
+
     o <- order(curve$power)
     n_hat <- stats::approx(x = curve$power[o], y = curve$n_per_arm[o],
                            xout = target, ties = "ordered")$y
     n_sel <- as.integer(ceiling(n_hat))
+
+    # `approx()` with tied powers returns the LAST tie, so a curve
+    # that saturates (power 1.000 repeated across sizes, which is
+    # routine) yields the largest size rather than the smallest.
+    # The documented contract is the smallest size attaining `target`,
+    # so take that directly whenever the grid already contains one at
+    # or below the interpolated value.
+    attains <- by_n$n_per_arm[by_n$power >= target]
+    if (length(attains)) {
+      n_sel <- as.integer(min(n_sel, min(attains)))
+    }
   }
   if (!is.finite(n_sel) || n_sel < 1L) {
     stop("Could not determine a sample size from the supplied grid; ",

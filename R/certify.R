@@ -18,6 +18,32 @@
 # Nothing here is new mathematics. Its value is as a routine, automatic
 # check inside a simulation workflow.
 
+# Shared input guard for the certificate functions. Both `certify()` and
+# `reach_error()` interpret the eigenvalue spectrum of `V` and are
+# meaningless on an input that is not a symmetric PSD covariance: the
+# spectrum of a non-symmetric matrix need not even be real, and a
+# negative eigenvalue is reported as a negative residual variance, which
+# is not a result but a silent contradiction.
+.check_square_psd <- function(V, tol = 1e-9, arg = "V") {
+  if (nrow(V) != ncol(V)) {
+    stop("`", arg, "` must be a square covariance matrix; it is ",
+         nrow(V), " x ", ncol(V),
+         ". Supply a symmetric matrix with equal row and column counts.")
+  }
+  if (!isSymmetric(unname(V), tol = sqrt(.Machine$double.eps))) {
+    stop("`", arg, "` must be symmetric, but it is not. Symmetrize it ",
+         "with `(V + t(V)) / 2` if the asymmetry is numerical noise.")
+  }
+  ev <- eigen(V, symmetric = TRUE, only.values = TRUE)$values
+  if (min(ev) < -tol) {
+    stop("`", arg, "` must be positive semi-definite; its smallest ",
+         "eigenvalue is ", format(min(ev), digits = 4),
+         ". Supply a valid covariance matrix, or raise `tol` if the ",
+         "negative eigenvalue is numerical noise.")
+  }
+  invisible(TRUE)
+}
+
 #' Certify whether a marginal covariance is reachable from random effects
 #'
 #' Computes the minimum number of random effects `q` required to
@@ -71,14 +97,8 @@
 #' @export
 certify <- function(V, tol = 1e-9) {
   V <- as.matrix(V)
-  stopifnot(nrow(V) == ncol(V))
-  if (!isSymmetric(unname(V), tol = sqrt(.Machine$double.eps))) {
-    stop("`V` must be symmetric.")
-  }
+  .check_square_psd(V, tol = tol)
   e <- eigen(V, symmetric = TRUE)
-  if (min(e$values) < -tol) {
-    stop("`V` must be positive semi-definite.")
-  }
   s2 <- max(min(e$values), 0)
   lam <- e$values - s2
   q <- sum(lam > tol)
@@ -115,7 +135,12 @@ print.reach_certificate <- function(x, ...) {
 #'   target to numerical precision.
 #' @export
 reconstruct <- function(cert) {
-  stopifnot(inherits(cert, "reach_certificate"))
+  if (!inherits(cert, "reach_certificate")) {
+    stop("`cert` must be a `reach_certificate` object as returned by ",
+         "`certify()`, but it has class ",
+         paste(class(cert), collapse = "/"),
+         ". Pass `certify(V)` rather than `V` itself.")
+  }
   cert$Z %*% cert$G %*% t(cert$Z) +
     cert$sigma2 * diag(cert$p)
 }
@@ -127,8 +152,13 @@ reconstruct <- function(cert) {
 #' into a statement of how far wrong a given budget would be.
 #'
 #' @param V Target covariance.
-#' @param q Integer vector of random-effect budgets to evaluate.
-#'   Defaults to `1:(p-1)`.
+#' @param q Integer vector of random-effect budgets to evaluate. Every
+#'   element must lie in `1:(p-1)`: a budget of `p` or more reaches `V`
+#'   exactly and has no approximation error to report. Defaults to
+#'   `1:(p-1)`.
+#' @param tol Numeric. Tolerance by which a slightly negative eigenvalue
+#'   is forgiven before `V` is rejected as not positive semi-definite,
+#'   as in [certify()].
 #' @return A data frame with columns `q`, `sigma2`, `max_abs_error`,
 #'   and `rel_frobenius`.
 #' @details
@@ -139,10 +169,32 @@ reconstruct <- function(cert) {
 #' ar1 <- 0.6 ^ abs(outer(1:6, 1:6, "-"))
 #' reach_error(ar1)
 #' @export
-reach_error <- function(V, q = NULL) {
+reach_error <- function(V, q = NULL, tol = 1e-9) {
   V <- as.matrix(V)
+  .check_square_psd(V, tol = tol)
   p <- nrow(V)
   if (is.null(q)) q <- seq_len(p - 1L)
+  # A budget of p or more is not an approximation problem: `V` is
+  # reachable exactly and there is no residual to average over. Left
+  # unchecked, `(qq + 1L):p` counts backwards and every reported
+  # quantity is silently NA.
+  if (!length(q) || !is.numeric(q) || anyNA(q)) {
+    stop("`q` must be a non-empty numeric vector of random-effect ",
+         "budgets, with no missing values.")
+  }
+  if (any(q < 1)) {
+    stop("`q` must be at least 1; the smallest value supplied is ",
+         min(q), ". A budget of zero random effects is not a rank-`q` ",
+         "approximation.")
+  }
+  if (any(q >= p)) {
+    stop("`q` must be less than `nrow(V)` = ", p,
+         "; the largest value supplied is ", max(q),
+         " and the maximum permitted is ", p - 1L,
+         ". A budget of ", p, " or more reaches `V` exactly, so there ",
+         "is no approximation error to report. Drop those values ",
+         "from `q`, or use `certify()` for the exact construction.")
+  }
   e <- eigen(V, symmetric = TRUE)
   lam <- e$values
   U <- e$vectors

@@ -92,8 +92,33 @@
 dgm_tte <- function(shape = 1, scale = 12, breaks = NULL,
                     rates = NULL, frailty_sd = 0, effect_lag = 0,
                     recurrent = FALSE, max_events = 100L) {
-  stopifnot(frailty_sd >= 0, effect_lag >= 0,
-            is.logical(recurrent), max_events >= 1)
+  if (length(frailty_sd) != 1L || !is.numeric(frailty_sd) ||
+      is.na(frailty_sd) || frailty_sd < 0) {
+    stop("`frailty_sd` must be a single non-negative number, the ",
+         "standard deviation of the log-hazard frailty, but it is ",
+         paste(format(frailty_sd), collapse = ", "),
+         ". Use 0 for no frailty.")
+  }
+  if (length(effect_lag) != 1L || !is.numeric(effect_lag) ||
+      is.na(effect_lag) || effect_lag < 0) {
+    stop("`effect_lag` must be a single non-negative number, the delay ",
+         "before the covariate effect begins, in the time unit of the ",
+         "study, but it is ", paste(format(effect_lag), collapse = ", "),
+         ". Use 0 for proportional hazards throughout.")
+  }
+  if (length(recurrent) != 1L || !is.logical(recurrent) ||
+      is.na(recurrent)) {
+    stop("`recurrent` must be a single `TRUE` or `FALSE`, but it is ",
+         paste(format(recurrent), collapse = ", "),
+         ". Use `TRUE` for all events in the follow-up window, ",
+         "`FALSE` for time to first event.")
+  }
+  if (length(max_events) != 1L || !is.numeric(max_events) ||
+      is.na(max_events) || max_events < 1) {
+    stop("`max_events` must be a single number of at least 1, the ",
+         "safety cap on events per subject, but it is ",
+         paste(format(max_events), collapse = ", "), ".")
+  }
 
   piecewise <- !is.null(breaks) || !is.null(rates)
   if (piecewise) {
@@ -111,11 +136,21 @@ dgm_tte <- function(shape = 1, scale = 12, breaks = NULL,
     if (any(rates <= 0)) stop("`rates` must be positive.")
     cuts <- c(0, breaks)
     # Cumulative hazard at each cut point, for inversion.
-    widths <- diff(c(cuts, Inf))
     cumH <- c(0, cumsum(rates[-length(rates)] *
                           diff(cuts)))
   } else {
-    stopifnot(shape > 0, scale > 0)
+    if (length(shape) != 1L || !is.numeric(shape) || is.na(shape) ||
+        shape <= 0) {
+      stop("`shape` must be a single positive number, the Weibull ",
+           "shape, but it is ", paste(format(shape), collapse = ", "),
+           ". Use 1 for an exponential baseline hazard.")
+    }
+    if (length(scale) != 1L || !is.numeric(scale) || is.na(scale) ||
+        scale <= 0) {
+      stop("`scale` must be a single positive number, the Weibull ",
+           "scale in the time unit of the study, but it is ",
+           paste(format(scale), collapse = ", "), ".")
+    }
     cuts <- cumH <- NULL
   }
 
@@ -231,8 +266,46 @@ print.dgm_tte <- function(x, ...) {
 #' generate_tte(subj, g, beta = c(trt = log(0.7)), followup = 24)[1:3, ]
 #' @export
 generate_tte <- function(subjects, dgm, beta, followup) {
-  stopifnot(inherits(dgm, "dgm_tte"), is.data.frame(subjects),
-            "id" %in% names(subjects))
+  if (!inherits(dgm, "dgm_tte")) {
+    stop("`dgm` must be a `dgm_tte` object as returned by `dgm_tte()`, ",
+         "but it has class ", paste(class(dgm), collapse = "/"), ".")
+  }
+  if (!is.data.frame(subjects)) {
+    stop("`subjects` must be a data frame with one row per subject, ",
+         "but it is of class ",
+         paste(class(subjects), collapse = "/"), ".")
+  }
+  if (!"id" %in% names(subjects)) {
+    stop("`subjects` must contain an `id` column identifying each ",
+         "subject; its columns are ",
+         paste(names(subjects), collapse = ", "),
+         ". Add `id` (for example `subjects$id <- seq_len(nrow(",
+         "subjects))`).")
+  }
+  # The generated endpoint columns are added to `subjects`, so a column
+  # of the same name in the input would be silently overwritten and the
+  # returned frame would look like a valid result while having lost the
+  # user's data. Refuse instead.
+  reserved <- if (dgm$recurrent) {
+    c("tstart", "tstop", "status", "enum")
+  } else {
+    c("time", "status")
+  }
+  clash <- intersect(reserved, names(subjects))
+  if (length(clash)) {
+    stop("`subjects` already contains the column(s) ",
+         paste0("`", clash, "`", collapse = ", "),
+         ", which `generate_tte()` would overwrite with the generated ",
+         if (dgm$recurrent) {
+           "counting-process interval(s). "
+         } else {
+           "endpoint. "
+         },
+         "Rename or drop ",
+         if (length(clash) > 1L) "them" else "it",
+         " before calling. Reserved for this `dgm`: ",
+         paste0("`", reserved, "`", collapse = ", "), ".")
+  }
   if (is.null(names(beta)) || any(names(beta) == "")) {
     stop("`beta` must be fully named.")
   }
@@ -243,7 +316,25 @@ generate_tte <- function(subjects, dgm, beta, followup) {
   }
   n <- nrow(subjects)
   if (length(followup) == 1L) followup <- rep(followup, n)
-  stopifnot(length(followup) == n, all(followup > 0))
+  if (length(followup) != n) {
+    stop("`followup` has length ", length(followup), " but `subjects` ",
+         "has ", n, " row(s); supply a single administrative ",
+         "censoring time applied to every subject, or one per subject ",
+         "(for staggered accrual, `close - enroll`).")
+  }
+  if (!is.numeric(followup)) {
+    stop("`followup` must be numeric, the administrative censoring ",
+         "time in the time unit of the study, but it is of class ",
+         paste(class(followup), collapse = "/"), ".")
+  }
+  if (anyNA(followup) || any(followup <= 0)) {
+    stop("`followup` must be positive and non-missing, but ",
+         sum(is.na(followup) | followup <= 0),
+         " subject(s) have a non-positive or missing value (minimum ",
+         format(min(followup, na.rm = TRUE), digits = 4),
+         "). A subject censored at time 0 contributes no follow-up; ",
+         "drop them from `subjects` instead.")
+  }
 
   X <- as.matrix(subjects[, names(beta), drop = FALSE])
   lp <- as.vector(X %*% beta)
@@ -325,7 +416,19 @@ tte_from_trajectory <- function(dat, threshold,
                                 direction = c("above", "below"),
                                 interpolate = FALSE) {
   direction <- match.arg(direction)
-  stopifnot(all(c("id", "time", "y") %in% names(dat)))
+  if (!is.data.frame(dat)) {
+    stop("`dat` must be a long-format data frame from ",
+         "`generate_outcomes()`, but it is of class ",
+         paste(class(dat), collapse = "/"), ".")
+  }
+  need <- setdiff(c("id", "time", "y"), names(dat))
+  if (length(need)) {
+    stop("`dat` is missing the column(s) ",
+         paste0("`", need, "`", collapse = ", "),
+         "; its columns are ", paste(names(dat), collapse = ", "),
+         ". Pass the long-format output of `generate_outcomes()`, or ",
+         "rename the columns to `id`, `time`, and `y`.")
+  }
   ids <- unique(dat$id)
   rows <- lapply(ids, function(i) {
     k <- which(dat$id == i)
