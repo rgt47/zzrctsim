@@ -286,5 +286,5 @@ expect_true(all(abs(lp - 0.5) < 1e-12),
 set.seed(11)
 g_old <- dgm_conditional(G = diag(c(9, 0.04)), sigma2 = 4)
 v1 <- cov_at(g_old, s2$time)
-expect_equal(v1, .zgz(g_old, s2$time) + 4 * diag(nrow(s2)),
+expect_equal(v1, zzrctsim:::.zgz(g_old, s2$time) + 4 * diag(nrow(s2)),
              info = 'Gaussian cov_at is still Z G Z\' + sigma^2 I')

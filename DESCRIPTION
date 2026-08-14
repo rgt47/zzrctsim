@@ -1,7 +1,7 @@
 Package: zzrctsim
 Title: Simulation of Longitudinal Randomized Trials with Conditional
     and Marginal Data-Generating Mechanisms
-Version: 0.0.0.9000
+Version: 0.1.0
 Authors@R:
     person(given = "Ronald G.", family = "Thomas", email = "rgthomas@ucsd.edu", role = c("aut", "cre"))
 Description: Simulates longitudinal randomized clinical trials in order
@@ -23,13 +23,16 @@ Description: Simulates longitudinal randomized clinical trials in order
     performance measures reported with Monte Carlo standard errors, and
     power curves and sample size determination by simulation.
 License: GPL-3
+URL: https://github.com/rgt47/zzrctsim
+BugReports: https://github.com/rgt47/zzrctsim/issues
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.0
 Imports:
     MASS,
     parallel,
-    stats
+    stats,
+    utils
 Suggests:
     knitr,
     lme4,

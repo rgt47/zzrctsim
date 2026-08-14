@@ -235,7 +235,7 @@ dropout_mechanism <- function(psi1 = 0, psi2 = 0) {
 #' closed form as `1 - prod(1 - p_j)` averaged over subjects, and is
 #' strictly increasing in `psi0`.
 #' @examples
-#' s <- trial_schedule(treatment = 5, interval = 3)
+#' s <- trial_schedule(run_in = 1, treatment = 5, interval = 3)
 #' arm <- factor(rep(c("placebo", "active"), each = 50),
 #'               levels = c("placebo", "active"))
 #' d <- runin_design(s, arm, reference = "placebo")

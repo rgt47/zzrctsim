@@ -1,20 +1,32 @@
 cff-version: 1.2.0
-message: "If you use this research compendium, please cite it as below."
+message: "If you use this software, please cite it as below."
 type: software
-title: "zzrctsim"
+title: "zzrctsim: Simulation of Longitudinal Randomized Trials with Conditional and Marginal Data-Generating Mechanisms"
 version: 0.1.0
-date-released: "2026-08-10"
-license: GPL-3
+date-released: "2026-08-14"
+license: GPL-3.0-only
+repository-code: "https://github.com/rgt47/zzrctsim"
 authors:
   - family-names: Thomas
-    given-names: Ronald G.
-    orcid: ""
+    given-names: "Ronald G."
+    orcid: "https://orcid.org/0000-0003-1686-4965"
     email: rgthomas@ucsd.edu
-    affiliation: Your Institution
+    affiliation: "Herbert Wertheim School of Public Health and Human Longevity Science, University of California San Diego"
 abstract: >
-  Reproducible research compendium created with zzcollab v0.3.0.
-  Contains all data, code, and computational environment needed to reproduce
-  the analyses.
+  Simulates longitudinal randomized clinical trials in order to evaluate
+  design and analysis choices. A data-generating mechanism for a continuous
+  Gaussian outcome may be declared either conditionally, through random
+  effects, or marginally, through a covariance matrix or a covariance
+  function of time, with exact conversion between the two parameterizations
+  where one exists and a computable rank certificate where it does not.
+  Missingness follows the Diggle and Kenward (1994) selection model,
+  calibrated to a target dropout proportion. Simulations follow Morris,
+  White and Crowther (2019), with L'Ecuyer-CMRG substreams, per-replicate
+  state capture, and performance measures reported with Monte Carlo
+  standard errors.
 keywords:
-  - reproducible-research
-  - research-compendium
+  - clinical-trials
+  - simulation
+  - longitudinal-data
+  - statistical-power
+  - missing-data

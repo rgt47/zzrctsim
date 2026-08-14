@@ -8,3 +8,10 @@
 ^Makefile$
 ^Dockerfile$
 ^\.dockerignore$
+^\.zzcollab$
+^\.zzcollab-state$
+^\.devcontainer$
+^zzcollab\.yaml$
+^CITATION\.cff$
+^tools$
+^cran-comments\.md$

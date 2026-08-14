@@ -206,15 +206,17 @@ g_pw <- dgm_tte(breaks = c(6, 12), rates = c(0.02, 0.06, 0.15))
 expect_true(g_pw$piecewise, info = 'piecewise baseline recorded')
 
 # H0 is piecewise linear with the stated slopes, and H0inv inverts it.
-expect_equal(.H0(0, g_pw), 0, info = 'H0(0) = 0')
-expect_equal(.H0(6, g_pw), 6 * 0.02, tolerance = 1e-12,
+expect_equal(zzrctsim:::.H0(0, g_pw), 0, info = 'H0(0) = 0')
+expect_equal(zzrctsim:::.H0(6, g_pw), 6 * 0.02, tolerance = 1e-12,
              info = 'first interval accrues at its own rate')
-expect_equal(.H0(12, g_pw), 6 * 0.02 + 6 * 0.06, tolerance = 1e-12,
+expect_equal(zzrctsim:::.H0(12, g_pw), 6 * 0.02 + 6 * 0.06,
+             tolerance = 1e-12,
              info = 'second interval accrues at its own rate')
-expect_equal(.H0(20, g_pw), 6 * 0.02 + 6 * 0.06 + 8 * 0.15,
+expect_equal(zzrctsim:::.H0(20, g_pw), 6 * 0.02 + 6 * 0.06 + 8 * 0.15,
              tolerance = 1e-12, info = 'final open interval')
 tt_grid <- c(0.5, 3, 6, 9, 12, 18, 30)
-expect_equal(.H0inv(.H0(tt_grid, g_pw), g_pw), tt_grid,
+expect_equal(zzrctsim:::.H0inv(zzrctsim:::.H0(tt_grid, g_pw), g_pw),
+             tt_grid,
              tolerance = 1e-10,
              info = 'H0inv is the exact inverse of H0')
 

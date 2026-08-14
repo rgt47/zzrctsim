@@ -1,0 +1,21 @@
+## `meta` is supplied by R from the installed DESCRIPTION, so the
+## version and year below track the package rather than being
+## hard-coded and going stale.
+year <- if (is.null(meta$Date)) NULL else sub("-.*", "", meta$Date)
+if (length(year) != 1L || !nzchar(year)) {
+  year <- format(Sys.Date(), "%Y")
+}
+vers <- if (is.null(meta$Version)) "" else meta$Version
+
+bibentry(
+  bibtype  = "Manual",
+  title    = paste0("{zzrctsim}: Simulation of Longitudinal Randomized ",
+                    "Trials with Conditional and Marginal ",
+                    "Data-Generating Mechanisms"),
+  author   = person(given = "Ronald G.", family = "Thomas",
+                    email = "rgthomas@ucsd.edu",
+                    comment = c(ORCID = "0000-0003-1686-4965")),
+  year     = year,
+  note     = paste("R package version", vers),
+  url      = "https://github.com/rgt47/zzrctsim"
+)
