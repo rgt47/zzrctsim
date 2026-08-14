@@ -34,7 +34,24 @@ normal reference.}
 \item{level}{Numeric confidence level used when limits are derived.}
 }
 \value{
-An object of class \code{fit_result}.
+An object of class \code{fit_result}, a list with
+\describe{
+\item{estimate}{the point estimate}
+\item{se}{the standard error}
+\item{p_value}{the p-value}
+\item{ci_lower, ci_upper}{the confidence limits; when either was
+not supplied, \strong{both} are recomputed as
+\verb{estimate +/- crit * se}, with \code{crit} a \code{t} quantile on \code{df}
+degrees of freedom, or a normal quantile when \code{df} is
+infinite}
+\item{df}{the denominator degrees of freedom used}
+\item{converged}{logical convergence flag; non-converged
+replicates are excluded by \code{\link[=compute_performance]{compute_performance()}}}
+\item{level}{the confidence level}
+}
+These seven names are the whole contract: \code{\link[=run_simulation]{run_simulation()}} reads
+\code{estimate}, \code{se}, \code{p_value}, \code{ci_lower}, \code{ci_upper} and
+\code{converged} from every fitter, and nothing else.
 }
 \description{
 Every analysis method must return this shape, so that competing

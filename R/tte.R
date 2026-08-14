@@ -41,7 +41,25 @@
 #'   value gives a **non-proportional** hazard in which the arms are
 #'   indistinguishable until `effect_lag` and diverge thereafter.
 #' @param max_events Integer. Safety cap on events per subject.
-#' @return An object of class `dgm_tte`.
+#' @return An object of class `c("dgm_tte", "dgm")`, a list with
+#'   \describe{
+#'     \item{shape, scale}{the Weibull parameters as supplied; ignored
+#'       when the baseline is piecewise}
+#'     \item{breaks, rates}{the piecewise-exponential specification, or
+#'       `NULL` for a Weibull baseline}
+#'     \item{cuts}{`c(0, breaks)`, the left endpoints of the hazard
+#'       intervals, or `NULL` for a Weibull baseline}
+#'     \item{cumH}{baseline cumulative hazard evaluated at `cuts`,
+#'       precomputed so that inversion is a lookup plus one division;
+#'       `NULL` for a Weibull baseline}
+#'     \item{piecewise}{logical, whether the piecewise-exponential
+#'       baseline is in force}
+#'     \item{frailty_sd}{standard deviation of the log-hazard frailty}
+#'     \item{effect_lag}{delay before the covariate effect begins}
+#'     \item{recurrent}{logical, whether all events or only the first
+#'       are generated}
+#'     \item{max_events}{integer safety cap on events per subject}
+#'   }
 #' @details
 #' Two baseline hazards are available. The Weibull, with
 #' `H_0(t) = (t / scale)^shape` and `H_0^{-1}(u) = scale * u^(1/shape)`;
@@ -171,17 +189,40 @@ print.dgm_tte <- function(x, ...) {
 #'   single value applied to every subject, or a vector of length
 #'   `nrow(subjects)` giving each subject's own follow-up, as produced
 #'   by staggered accrual with a common close-out.
-#' @return For a single event, `subjects` with `time` and `status`
-#'   added (`status = 1` event, `0` censored). For recurrent events, a
-#'   counting-process data frame with one row per interval and columns
-#'   `id`, `tstart`, `tstop`, `status`, `enum`, plus the subject
-#'   columns; this is the format `survival::coxph()` expects for
-#'   Andersen-Gill models.
+#' @return A data frame, in one of two shapes.
+#'
+#'   For a single event (`recurrent = FALSE`), `subjects` with two
+#'   columns added:
+#'   \describe{
+#'     \item{time}{`pmin(event time, followup)`, the observed
+#'       follow-up}
+#'     \item{status}{integer, `1` if the event was observed, `0` if
+#'       administratively censored at `followup`}
+#'   }
+#'
+#'   For recurrent events, a counting-process data frame with one row
+#'   per at-risk interval and columns
+#'   \describe{
+#'     \item{id}{subject identifier, repeated across that subject's
+#'       intervals}
+#'     \item{tstart, tstop}{the half-open interval `(tstart, tstop]`}
+#'     \item{status}{`1` if an event closed the interval, `0` if it was
+#'       closed by the end of follow-up}
+#'     \item{enum}{event sequence number within subject, from `1`}
+#'   }
+#'   followed by every column of `subjects` other than `id`. This is
+#'   the format `survival::coxph()` expects for Andersen-Gill models.
+#'
+#'   In both cases an `lp` attribute is attached: one entry per row of
+#'   `subjects`, giving the linear predictor `x_i'beta` **including**
+#'   the drawn frailty. It is retained because the realized frailty is
+#'   otherwise unrecoverable, and a simulation comparing a conditional
+#'   against a marginal hazard ratio needs it.
 #' @details
 #' Administrative censoring from a common close-out is the natural
 #' companion to [accrue()] and [close_out()]: pass
 #' `followup = close - enroll` and each subject is censored at the
-#' study end, with follow-up decreasing in enrolment time.
+#' study end, with follow-up decreasing in enrollment time.
 #' @examples
 #' set.seed(1)
 #' subj <- data.frame(id = 1:200,

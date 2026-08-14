@@ -46,7 +46,25 @@ indistinguishable until \code{effect_lag} and diverge thereafter.}
 \item{max_events}{Integer. Safety cap on events per subject.}
 }
 \value{
-An object of class \code{dgm_tte}.
+An object of class \code{c("dgm_tte", "dgm")}, a list with
+\describe{
+\item{shape, scale}{the Weibull parameters as supplied; ignored
+when the baseline is piecewise}
+\item{breaks, rates}{the piecewise-exponential specification, or
+\code{NULL} for a Weibull baseline}
+\item{cuts}{\code{c(0, breaks)}, the left endpoints of the hazard
+intervals, or \code{NULL} for a Weibull baseline}
+\item{cumH}{baseline cumulative hazard evaluated at \code{cuts},
+precomputed so that inversion is a lookup plus one division;
+\code{NULL} for a Weibull baseline}
+\item{piecewise}{logical, whether the piecewise-exponential
+baseline is in force}
+\item{frailty_sd}{standard deviation of the log-hazard frailty}
+\item{effect_lag}{delay before the covariate effect begins}
+\item{recurrent}{logical, whether all events or only the first
+are generated}
+\item{max_events}{integer safety cap on events per subject}
+}
 }
 \description{
 Specify a time-to-event data-generating mechanism

@@ -29,11 +29,11 @@ instead of calibrating from \code{target}. May be named by the levels
 of \code{by}.}
 
 \item{psi1, psi2}{Numeric. Coefficients on the previous and current
-centred response. See \code{\link[=apply_dropout]{apply_dropout()}}.}
+centered response. See \code{\link[=apply_dropout]{apply_dropout()}}.}
 
 \item{psi_cov}{Named numeric vector of coefficients on additional
 columns of \code{dat}, giving covariate-dependent missingness. Columns
-are used as supplied, without centring.}
+are used as supplied, without centering.}
 
 \item{by}{Character. Column of \code{dat} defining groups with separate
 \code{target} or \code{psi0}, typically \code{"arm"}.}
@@ -42,7 +42,7 @@ are used as supplied, without centring.}
 missing, missing thereafter. \code{FALSE} gives intermittent
 missingness, each eligible visit independent.}
 
-\item{center}{Numeric. Centring value for the response.}
+\item{center}{Numeric. Centering value for the response.}
 
 \item{from}{Numeric. Missingness only permitted where \code{time > from}.}
 }

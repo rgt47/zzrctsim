@@ -34,7 +34,18 @@
 #'   shifts to the mean, one per component, or a list of functions of
 #'   the time vector for time-varying shifts. Defaults to zero, in
 #'   which case the components differ only in covariance.
-#' @return An object of class `dgm_mixture`.
+#' @return An object of class `c("dgm_mixture", "dgm")`, a list with
+#'   \describe{
+#'     \item{components}{the list of component `dgm` objects, as
+#'       supplied}
+#'     \item{weights}{the mixing probabilities, defaulted to
+#'       `rep(1 / K, K)` when absent}
+#'     \item{mean_shift}{always a list of `K` functions of the time
+#'       vector, whatever the input form: a numeric `mean_shift` is
+#'       wrapped into constant functions, and the default becomes `K`
+#'       functions returning zero}
+#'     \item{K}{integer, the number of components}
+#'   }
 #' @details
 #' The `mean_shift` is added to the fixed-effect mean supplied to
 #' [generate_outcomes()]. A shift that is constant in time moves the

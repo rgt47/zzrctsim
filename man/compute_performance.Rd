@@ -17,16 +17,25 @@ data frame with \code{estimate}, \code{se}, \code{ci_lower}, \code{ci_upper},
 \item{alpha}{Numeric. Significance level for the rejection rate.}
 }
 \value{
-A data frame with one row per method and measure, carrying
-\code{estimate} and \code{mcse}.
+A data frame with columns \code{method}, \code{measure}, \code{estimate}
+and \code{mcse}, and one row per method and measure: eleven rows per
+method, or a single \code{n_converged} row for any method with fewer
+than two converged replicates. \code{mcse} is \code{NA} for the two measures
+that are counts rather than estimates.
 }
 \description{
 Performance measures for a simulation study
 }
 \details{
-Measures, with \code{B} the number of converged replicates:
+Measures, in the order emitted, with \code{B} the number of converged
+replicates:
 \describe{
-\item{\code{n_converged}}{count of usable replicates}
+\item{\code{n_converged}}{count of usable replicates: those flagged
+converged with a non-missing estimate. No MCSE.}
+\item{\code{conv_rate}}{\code{n_converged} divided by the number of
+replicates attempted for that method. No MCSE. A rate below one
+means the remaining measures are conditional on convergence and
+may be selectively biased.}
 \item{\code{bias}}{\code{mean(est) - theta}; MCSE is the standard error of
 the mean}
 \item{\code{emp_se}}{\code{sd(est)}; MCSE \code{emp_se / sqrt(2(B-1))}}
@@ -36,9 +45,13 @@ standard error}
 under-states \code{emp_se}; a key diagnostic of variance estimation}
 \item{\code{mse}}{\code{mean((est - theta)^2)}}
 \item{\code{coverage}}{proportion of intervals containing \code{theta}}
-\item{\code{bias_elim_coverage}}{coverage of intervals recentred on
+\item{\code{bias_elim_coverage}}{coverage of intervals recentered on
 \code{mean(est)}, which separates interval width problems from bias}
 \item{\code{rejection}}{proportion with \code{p < alpha}; power under an
 alternative, type I error under the null}
+\item{\code{mean_ci_width}}{\code{mean(ci_upper - ci_lower)}, with MCSE the
+standard error of that mean. Read alongside \code{coverage}: an
+interval can reach nominal coverage by being needlessly wide,
+and the pair distinguishes that from a well-calibrated one.}
 }
 }

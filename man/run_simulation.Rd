@@ -21,10 +21,29 @@ data (common random numbers).}
 \item{seed}{Integer. Master seed.}
 }
 \value{
-An object of class \code{sim_results}: a data frame with one row
-per replicate and method, carrying \code{rep}, \code{method}, \code{estimate},
-\code{se}, \code{p_value}, \code{ci_lower}, \code{ci_upper}, \code{converged}, plus
-attributes \code{estimand}, \code{streams}, \code{seed} and \code{B}.
+An object of class \code{c("sim_results", "data.frame")} with
+\code{B * length(analyse)} rows, one per replicate and method, and
+columns
+\describe{
+\item{rep}{replicate index, \code{1} to \code{B}}
+\item{method}{the name of the element of \code{analyse} that produced
+the row}
+\item{estimate, se, p_value, ci_lower, ci_upper, converged}{the
+corresponding elements of that method's \code{\link[=fit_result]{fit_result()}}}
+}
+carrying the attributes
+\describe{
+\item{estimand}{the \code{\link[=estimand]{estimand()}} supplied, from which
+\code{\link[=compute_performance]{compute_performance()}} takes the true value}
+\item{streams}{the list of \code{B} RNG states, one per replicate, for
+replay with \code{\link[=with_rng_state]{with_rng_state()}}}
+\item{seed}{the master seed}
+\item{B}{the number of replicates}
+\item{errors}{a character vector of trapped error messages, each
+tagged with its replicate number and whether it arose in
+\code{generate} or \code{analyse}. Empty when every replicate succeeded,
+and reported by the \code{print} method when not.}
+}
 }
 \description{
 Drives the replicate loop, storing per-replicate estimates together
@@ -39,4 +58,22 @@ reproduced exactly with \code{\link[=with_rng_state]{with_rng_state()}}.
 
 Passing several methods analyses the identical data set with each,
 which is the paired comparison Morris et al. recommend.
+}
+\examples{
+sch <- trial_schedule(treatment = 4, interval = 3)
+arm <- factor(rep(c("placebo", "active"), each = 30),
+              levels = c("placebo", "active"))
+d <- runin_design(sch, arm, reference = "placebo")
+g <- dgm_conditional(G = diag(c(9, 0.04)), sigma2 = 4)
+bt <- c(x_slope = 0.5, x_trt_active = -0.25)
+
+res <- run_simulation(
+  B = 20,
+  generate = function() {
+    generate_outcomes(d, g, beta = bt, intercept = 20)
+  },
+  analyse = fit_ancova,
+  estimand = estimand("difference in change at month 12", -3))
+res
+head(compute_performance(res), 4)
 }

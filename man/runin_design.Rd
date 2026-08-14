@@ -15,9 +15,14 @@ runin_design(
 \arguments{
 \item{schedule}{A \code{trial_schedule}.}
 
-\item{arm}{Integer or logical vector of length \code{n}, the treatment
-indicator \code{g_i} (1 = treatment, 0 = control), one entry per
-subject.}
+\item{arm}{Arm allocation, one entry per subject, of length \code{n}.
+Any vector \code{factor()} accepts: a factor is used as given, and
+anything else (integer, character, logical) is coerced with
+\code{factor()}. Arbitrarily many levels are supported, not just two,
+so a three-arm dose-ranging design is written by supplying three
+levels. The level ordering matters only through \code{reference}, which
+defaults to the first level; every other level gets its own
+treatment column.}
 
 \item{hinge}{Logical, length 1 or one entry per arm level. Whether
 each arm's mean profile changes slope at randomization. \code{FALSE}
@@ -35,12 +40,29 @@ treatment column to zero during the common close, following
 treatment contribution constant after the last on-treatment visit.}
 }
 \value{
-A data frame with \code{n * nrow(schedule)} rows and columns
-\code{id}, \code{arm}, \code{index}, \code{time}, \code{phase}, and the model columns
-\code{x_slope} (the common slope on every visit), \code{x_hinge} (the
-reference arm's post-randomization slope increment, present only
-when the reference arm is hinged), and one \verb{x_trt_<level>} column
-per non-reference arm.
+A data frame with \code{n * nrow(schedule)} rows, subjects
+varying slowest and visits fastest, and columns
+\describe{
+\item{id}{subject index, \code{1} to \code{n}, in the order \code{arm} was
+given}
+\item{arm}{the arm factor, recycled across that subject's
+visits}
+\item{index, time, phase}{copied from \code{schedule}}
+\item{x_slope}{the common slope column, equal to \code{time} on every
+visit}
+\item{x_hinge}{\code{h * time}, the reference arm's post-randomization
+slope increment. Present only when the reference arm is hinged
+\strong{and} the schedule has a run-in phase (\code{J0 > 0}). With
+\code{J0 = 0} the column would be aliased with \code{x_slope}, since
+\code{h} differs from \code{1} only at the randomization visit where
+\code{time} is zero, so it is omitted rather than handed over as a
+rank-deficient design.}
+\item{x_trt_\if{html}{\out{<level>}}}{one column per non-reference arm level that
+is hinged, holding the treatment-phase time for subjects in
+that arm and zero otherwise. Non-hinged arms are skipped, so
+there are as many such columns as there are hinged
+non-reference levels, not one per non-reference level.}
+}
 }
 \description{
 Constructs the three slope columns of the model

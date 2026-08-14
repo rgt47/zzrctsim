@@ -17,7 +17,13 @@ this matters: an estimand is a statement about a population
 quantity, not about an estimator.}
 }
 \value{
-An object of class \code{estimand}.
+An object of class \code{estimand}, a list with
+\describe{
+\item{name}{the label, as supplied}
+\item{value}{the true value; \code{\link[=compute_performance]{compute_performance()}} takes
+\code{theta} from here when none is passed}
+\item{description}{the prose definition, or \code{NULL}}
+}
 }
 \description{
 Declare an estimand

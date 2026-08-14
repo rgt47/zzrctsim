@@ -18,8 +18,20 @@ selected size. \code{0} skips confirmation.}
 \item{...}{Passed to \code{\link[=sim_power]{sim_power()}}.}
 }
 \value{
-An object of class \code{sample_size}: a list with \code{n_per_arm},
-\code{target}, the \code{curve}, and the \code{confirmation} row.
+An object of class \code{sample_size}, a list with
+\describe{
+\item{n_per_arm}{integer. The selected per-arm sample size:
+\code{ceiling()} of the interpolated size, or the smallest value on
+\code{n_grid} when \code{target} was already exceeded there, in which
+case a warning states that it is only an upper bound.}
+\item{target}{the requested power, as supplied}
+\item{curve}{the \code{power_curve} the selection was interpolated
+from}
+\item{confirmation}{a one-row \code{\link[=sim_power]{sim_power()}} data frame at
+\code{n_per_arm}, run with \code{confirm_B} replicates on an independent
+RNG stream, or \code{NULL} when \code{confirm_B = 0}. Its \code{power} and
+\code{mcse} are the figures to quote.}
+}
 }
 \description{
 Searches for the smallest per-arm sample size attaining \code{power}.

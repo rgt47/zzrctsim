@@ -13,7 +13,13 @@
 #' @param description Character. Optional prose definition. Recording
 #'   this matters: an estimand is a statement about a population
 #'   quantity, not about an estimator.
-#' @return An object of class `estimand`.
+#' @return An object of class `estimand`, a list with
+#'   \describe{
+#'     \item{name}{the label, as supplied}
+#'     \item{value}{the true value; [compute_performance()] takes
+#'       `theta` from here when none is passed}
+#'     \item{description}{the prose definition, or `NULL`}
+#'   }
 #' @export
 estimand <- function(name, value, description = NULL) {
   stopifnot(is.character(name), length(name) == 1L,
@@ -46,7 +52,24 @@ print.estimand <- function(x, ...) {
 #'   normal reference.
 #' @param converged Logical.
 #' @param level Numeric confidence level used when limits are derived.
-#' @return An object of class `fit_result`.
+#' @return An object of class `fit_result`, a list with
+#'   \describe{
+#'     \item{estimate}{the point estimate}
+#'     \item{se}{the standard error}
+#'     \item{p_value}{the p-value}
+#'     \item{ci_lower, ci_upper}{the confidence limits; when either was
+#'       not supplied, **both** are recomputed as
+#'       `estimate +/- crit * se`, with `crit` a `t` quantile on `df`
+#'       degrees of freedom, or a normal quantile when `df` is
+#'       infinite}
+#'     \item{df}{the denominator degrees of freedom used}
+#'     \item{converged}{logical convergence flag; non-converged
+#'       replicates are excluded by [compute_performance()]}
+#'     \item{level}{the confidence level}
+#'   }
+#'   These seven names are the whole contract: [run_simulation()] reads
+#'   `estimate`, `se`, `p_value`, `ci_lower`, `ci_upper` and
+#'   `converged` from every fitter, and nothing else.
 #' @export
 fit_result <- function(estimate = NA_real_, se = NA_real_,
                        p_value = NA_real_,
@@ -156,10 +179,29 @@ fit_ancova <- function(dat, visit_time = NULL, reference = NULL,
 #'   data (common random numbers).
 #' @param estimand An [estimand()].
 #' @param seed Integer. Master seed.
-#' @return An object of class `sim_results`: a data frame with one row
-#'   per replicate and method, carrying `rep`, `method`, `estimate`,
-#'   `se`, `p_value`, `ci_lower`, `ci_upper`, `converged`, plus
-#'   attributes `estimand`, `streams`, `seed` and `B`.
+#' @return An object of class `c("sim_results", "data.frame")` with
+#'   `B * length(analyse)` rows, one per replicate and method, and
+#'   columns
+#'   \describe{
+#'     \item{rep}{replicate index, `1` to `B`}
+#'     \item{method}{the name of the element of `analyse` that produced
+#'       the row}
+#'     \item{estimate, se, p_value, ci_lower, ci_upper, converged}{the
+#'       corresponding elements of that method's [fit_result()]}
+#'   }
+#'   carrying the attributes
+#'   \describe{
+#'     \item{estimand}{the [estimand()] supplied, from which
+#'       [compute_performance()] takes the true value}
+#'     \item{streams}{the list of `B` RNG states, one per replicate, for
+#'       replay with [with_rng_state()]}
+#'     \item{seed}{the master seed}
+#'     \item{B}{the number of replicates}
+#'     \item{errors}{a character vector of trapped error messages, each
+#'       tagged with its replicate number and whether it arose in
+#'       `generate` or `analyse`. Empty when every replicate succeeded,
+#'       and reported by the `print` method when not.}
+#'   }
 #' @details
 #' Errors and warnings inside `generate` or `analyse` are trapped: the
 #' replicate is recorded as non-converged rather than aborting the run,
@@ -169,6 +211,23 @@ fit_ancova <- function(dat, visit_time = NULL, reference = NULL,
 #'
 #' Passing several methods analyses the identical data set with each,
 #' which is the paired comparison Morris et al. recommend.
+#' @examples
+#' sch <- trial_schedule(treatment = 4, interval = 3)
+#' arm <- factor(rep(c("placebo", "active"), each = 30),
+#'               levels = c("placebo", "active"))
+#' d <- runin_design(sch, arm, reference = "placebo")
+#' g <- dgm_conditional(G = diag(c(9, 0.04)), sigma2 = 4)
+#' bt <- c(x_slope = 0.5, x_trt_active = -0.25)
+#'
+#' res <- run_simulation(
+#'   B = 20,
+#'   generate = function() {
+#'     generate_outcomes(d, g, beta = bt, intercept = 20)
+#'   },
+#'   analyse = fit_ancova,
+#'   estimand = estimand("difference in change at month 12", -3))
+#' res
+#' head(compute_performance(res), 4)
 #' @export
 run_simulation <- function(B, generate, analyse, estimand,
                            seed = 20260810L) {

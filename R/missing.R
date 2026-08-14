@@ -52,16 +52,16 @@
 #'   instead of calibrating from `target`. May be named by the levels
 #'   of `by`.
 #' @param psi1,psi2 Numeric. Coefficients on the previous and current
-#'   centred response. See [apply_dropout()].
+#'   centered response. See [apply_dropout()].
 #' @param psi_cov Named numeric vector of coefficients on additional
 #'   columns of `dat`, giving covariate-dependent missingness. Columns
-#'   are used as supplied, without centring.
+#'   are used as supplied, without centering.
 #' @param by Character. Column of `dat` defining groups with separate
 #'   `target` or `psi0`, typically `"arm"`.
 #' @param monotone Logical. `TRUE` gives absorbing dropout: once
 #'   missing, missing thereafter. `FALSE` gives intermittent
 #'   missingness, each eligible visit independent.
-#' @param center Numeric. Centring value for the response.
+#' @param center Numeric. Centering value for the response.
 #' @param from Numeric. Missingness only permitted where `time > from`.
 #' @return An object of class `missing_mask`: a data frame of `id`,
 #'   `time`, and logical `missing`, with a `spec` attribute.
@@ -276,7 +276,7 @@ apply_mask <- function(dat, mask, response = "y") {
 #'
 #' Modifies the mean trajectory after treatment discontinuation
 #' according to a pattern-mixture assumption. This is a *generator*:
-#' it produces data whose true post-withdrawal behaviour follows the
+#' it produces data whose true post-withdrawal behavior follows the
 #' named assumption, so that analyses which assume something else can
 #' be evaluated for bias.
 #'

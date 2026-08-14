@@ -24,3 +24,14 @@ Pins \code{RNGkind("L'Ecuyer-CMRG")} for the duration of the call and
 restores the previous kind on exit, so calling this does not change
 the caller's generator.
 }
+\examples{
+streams <- sim_streams(3, seed = 20260810L)
+length(streams)
+
+# Each substream is independent, and replaying one reproduces its
+# draws exactly.
+a <- with_rng_state(streams[[2]], rnorm(3))
+b <- with_rng_state(streams[[2]], rnorm(3))
+identical(a, b)
+identical(a, with_rng_state(streams[[3]], rnorm(3)))
+}

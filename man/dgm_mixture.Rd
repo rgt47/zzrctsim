@@ -21,7 +21,18 @@ the time vector for time-varying shifts. Defaults to zero, in
 which case the components differ only in covariance.}
 }
 \value{
-An object of class \code{dgm_mixture}.
+An object of class \code{c("dgm_mixture", "dgm")}, a list with
+\describe{
+\item{components}{the list of component \code{dgm} objects, as
+supplied}
+\item{weights}{the mixing probabilities, defaulted to
+\code{rep(1 / K, K)} when absent}
+\item{mean_shift}{always a list of \code{K} functions of the time
+vector, whatever the input form: a numeric \code{mean_shift} is
+wrapped into constant functions, and the default becomes \code{K}
+functions returning zero}
+\item{K}{integer, the number of components}
+}
 }
 \description{
 Each subject is assigned to a component with probability \code{weights},

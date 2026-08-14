@@ -1,7 +1,7 @@
 # Staggered accrual and common close-out.
 #
 # `trial_schedule()` defines the schedule relative to a subject's own
-# randomization. When subjects enrol at different calendar times and
+# randomization. When subjects enroll at different calendar times and
 # the study runs to a single close-out date, the realized schedule is
 # subject specific: a subject enrolled early has more calendar time
 # available before close-out and is therefore observed for longer than
@@ -9,28 +9,28 @@
 # exactly the nominal duration.
 #
 # Calendar time of subject i's visit j is  e_i + t_j,  where e_i is the
-# enrolment time. A visit is observed when that falls at or before the
+# enrollment time. A visit is observed when that falls at or before the
 # close-out date C.
 
-#' Generate enrolment times
+#' Generate enrollment times
 #'
 #' @param n Integer. Number of subjects.
 #' @param period Numeric. Length of the accrual window, in the study
 #'   time unit.
-#' @param pattern Character. `"uniform"` spreads enrolment evenly at
+#' @param pattern Character. `"uniform"` spreads enrollment evenly at
 #'   random over the window; `"linear"` places subjects at
 #'   deterministic equally spaced times; `"poisson"` draws
 #'   inter-arrival times from an exponential distribution with the rate
 #'   implied by `n` and `period`.
-#' @return Numeric vector of `n` enrolment times, sorted.
+#' @return Numeric vector of `n` enrollment times, sorted.
 #' @details
 #' `"uniform"` and `"linear"` return times within `[0, period]`.
 #' `"poisson"` does not: it accumulates exponential inter-arrival
 #' times at rate `n / period`, so `period` sets the *expected* span of
-#' the last enrolment and any particular realization may overrun it.
+#' the last enrollment and any particular realization may overrun it.
 #' That is the intended behavior of a Poisson process with a target
 #' rate, but it means a downstream [close_out()] driven by the last
-#' enrolment can fall after `period`.
+#' enrollment can fall after `period`.
 #' @export
 accrue <- function(n, period,
                    pattern = c("uniform", "linear", "poisson")) {
@@ -50,14 +50,28 @@ accrue <- function(n, period,
 
 #' Determine the study close-out date
 #'
-#' @param enroll Numeric vector of enrolment times.
+#' @param enroll Numeric vector of enrollment times.
 #' @param schedule A `trial_schedule`.
 #' @param rule Character. `"lslv"` (last subject, last visit) closes
 #'   when the last enrolled subject completes the nominal schedule.
 #'   `"fixed"` uses `at` directly.
 #' @param at Numeric. Calendar close-out date, required when
 #'   `rule = "fixed"`.
-#' @return A single numeric calendar time.
+#' @return A single numeric calendar time: `max(enroll) +
+#'   max(schedule$time)` under `"lslv"`, or `as.numeric(at)` under
+#'   `"fixed"`. Pass it to [realize_schedule()] as `close`.
+#' @examples
+#' set.seed(1)
+#' s <- trial_schedule(treatment = 4, interval = 3)
+#' e <- accrue(n = 20, period = 6, pattern = "uniform")
+#'
+#' # Last subject, last visit: close 12 months after the final
+#' # enrollment, so every subject completes the nominal schedule.
+#' close_out(e, s, rule = "lslv")
+#'
+#' # A fixed calendar date instead: subjects enrolled late are
+#' # censored before completing.
+#' close_out(e, s, rule = "fixed", at = 15)
 #' @export
 close_out <- function(enroll, schedule, rule = c("lslv", "fixed"),
                       at = NULL) {
@@ -73,7 +87,7 @@ close_out <- function(enroll, schedule, rule = c("lslv", "fixed"),
 #' Realize a schedule under staggered accrual and a common close-out
 #'
 #' Expands a nominal `trial_schedule` across subjects with given
-#' enrolment times, and marks which visits fall before the close-out
+#' enrollment times, and marks which visits fall before the close-out
 #' date. When `extend = TRUE` (the default) subjects enrolled before
 #' the last one continue to be observed past the nominal final visit,
 #' on the same spacing, up to close-out.
@@ -81,18 +95,36 @@ close_out <- function(enroll, schedule, rule = c("lslv", "fixed"),
 #' @param schedule A `trial_schedule` with equal spacing. Extension
 #'   requires a known `interval`, so schedules built from explicit
 #'   `times` cannot be extended.
-#' @param enroll Numeric vector of enrolment times, one per subject.
+#' @param enroll Numeric vector of enrollment times, one per subject.
 #' @param close Numeric. Close-out calendar time, from `close_out()`.
 #' @param extend Logical. Continue observing early enrollees past the
 #'   nominal final visit, up to close-out.
 #' @return A data frame with one row per subject-visit actually
-#'   observed, with columns `id`, `enroll`, `index`, `time` (study time
-#'   since randomization), `calendar` (`enroll + time`), `phase`, `h`,
-#'   and `on_treatment`. Visits after close-out are dropped.
+#'   observed, and columns
+#'   \describe{
+#'     \item{id}{subject index, `1` to `length(enroll)`, in the order
+#'       `enroll` was given}
+#'     \item{enroll}{that subject's enrollment time, repeated across
+#'       their visits}
+#'     \item{index}{visit index `j`, continuing past the nominal final
+#'       index when the visit is an extension}
+#'     \item{time}{study time since randomization, `index * interval`}
+#'     \item{calendar}{`enroll + time`, the calendar time of the visit}
+#'     \item{phase}{factor with levels `run_in`, `randomization`,
+#'       `treatment`, `common_close`; extended visits inherit the phase
+#'       of the nominal final visit}
+#'     \item{h}{phase indicator, `1` after randomization; `1` for all
+#'       extended visits}
+#'     \item{on_treatment}{logical; `FALSE` for all extended visits,
+#'       since the nominal treatment period has ended}
+#'   }
+#'   Visits whose `calendar` exceeds `close` are dropped, so the number
+#'   of rows per subject varies and the data frame is unbalanced by
+#'   construction.
 #' @details
 #' Under `rule = "lslv"` every subject completes at least the nominal
 #' schedule, and follow-up duration is a decreasing function of
-#' enrolment time. The resulting imbalance is informative: it is a
+#' enrollment time. The resulting imbalance is informative: it is a
 #' design feature of common close-out trials, and it is the mechanism
 #' by which the information fraction at an interim analysis is
 #' determined.
@@ -101,6 +133,24 @@ close_out <- function(enroll, schedule, rule = c("lslv", "fixed"),
 #' visit. If the nominal schedule ends in a common close, extended
 #' visits are also `common_close`; if it ends on treatment, they are
 #' `treatment`.
+#' @examples
+#' set.seed(1)
+#' s <- trial_schedule(treatment = 4, interval = 3)
+#'
+#' # Accrue 20 subjects over 6 months, then close out when the last
+#' # of them completes the nominal 12-month schedule.
+#' e <- accrue(n = 20, period = 6, pattern = "uniform")
+#' cl <- close_out(e, s, rule = "lslv")
+#' rs <- realize_schedule(s, e, cl)
+#' head(rs, 3)
+#'
+#' # Follow-up is longest for the first enrolled and exactly nominal
+#' # for the last: the design feature that makes the data unbalanced.
+#' range(tapply(rs$time, rs$id, max))
+#'
+#' # Without extension every subject gets the nominal schedule only.
+#' fixed <- realize_schedule(s, e, cl, extend = FALSE)
+#' range(table(fixed$id))
 #' @export
 realize_schedule <- function(schedule, enroll, close,
                              extend = TRUE) {

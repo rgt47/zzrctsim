@@ -7,21 +7,34 @@
 certify(V, tol = 1e-09)
 }
 \arguments{
-\item{V}{A symmetric positive-definite covariance matrix.}
+\item{V}{A symmetric positive semi-definite covariance matrix. A
+singular \code{V} is accepted: it simply certifies a \code{sigma2} of zero,
+which is the noise-free case rather than an error.}
 
 \item{tol}{Numeric. Eigenvalues below this, after shifting, are
-treated as zero.}
+treated as zero. Also the tolerance by which a slightly negative
+eigenvalue is forgiven before \code{V} is rejected as not positive
+semi-definite.}
 }
 \value{
 An object of class \code{reach_certificate}, a list with
 \describe{
-\item{q_min}{minimum number of random effects}
-\item{sigma2}{the residual variance attaining it}
-\item{Z}{\verb{p x q_min} matrix of loadings}
-\item{G}{\verb{q_min x q_min} diagonal random-effects covariance}
-\item{eigenvalues}{spectrum of \code{V}}
-\item{p}{dimension}
+\item{q_min}{integer. The minimum number of random effects that
+can represent \code{V} as \verb{Z G Z' + sigma2 I}, namely the number of
+eigenvalues exceeding \code{sigma2} by more than \code{tol}.}
+\item{sigma2}{the residual variance attaining it: the smallest
+eigenvalue of \code{V}, floored at zero.}
+\item{Z}{a \verb{p x q_min} matrix of loadings, the leading \code{q_min}
+eigenvectors of \code{V}. Orthonormal, and in general \emph{not} design
+columns such as an intercept and a slope; see Details.}
+\item{G}{a \verb{q_min x q_min} diagonal matrix whose entries are the
+leading eigenvalues shifted down by \code{sigma2}.}
+\item{eigenvalues}{the full spectrum of \code{V}, all \code{p} values in
+decreasing order.}
+\item{p}{integer, the dimension of \code{V}.}
 }
+\code{\link[=reconstruct]{reconstruct()}} returns \verb{Z G Z' + sigma2 I} from these, equal to
+\code{V} to numerical precision whenever the certificate is exact.
 }
 \description{
 Computes the minimum number of random effects \code{q} required to

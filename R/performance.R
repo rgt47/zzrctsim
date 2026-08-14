@@ -13,12 +13,21 @@
 #' @param theta Numeric. True value of the estimand. Taken from the
 #'   `estimand` attribute when absent.
 #' @param alpha Numeric. Significance level for the rejection rate.
-#' @return A data frame with one row per method and measure, carrying
-#'   `estimate` and `mcse`.
+#' @return A data frame with columns `method`, `measure`, `estimate`
+#'   and `mcse`, and one row per method and measure: eleven rows per
+#'   method, or a single `n_converged` row for any method with fewer
+#'   than two converged replicates. `mcse` is `NA` for the two measures
+#'   that are counts rather than estimates.
 #' @details
-#' Measures, with `B` the number of converged replicates:
+#' Measures, in the order emitted, with `B` the number of converged
+#' replicates:
 #' \describe{
-#'   \item{`n_converged`}{count of usable replicates}
+#'   \item{`n_converged`}{count of usable replicates: those flagged
+#'     converged with a non-missing estimate. No MCSE.}
+#'   \item{`conv_rate`}{`n_converged` divided by the number of
+#'     replicates attempted for that method. No MCSE. A rate below one
+#'     means the remaining measures are conditional on convergence and
+#'     may be selectively biased.}
 #'   \item{`bias`}{`mean(est) - theta`; MCSE is the standard error of
 #'     the mean}
 #'   \item{`emp_se`}{`sd(est)`; MCSE `emp_se / sqrt(2(B-1))`}
@@ -28,10 +37,14 @@
 #'     under-states `emp_se`; a key diagnostic of variance estimation}
 #'   \item{`mse`}{`mean((est - theta)^2)`}
 #'   \item{`coverage`}{proportion of intervals containing `theta`}
-#'   \item{`bias_elim_coverage`}{coverage of intervals recentred on
+#'   \item{`bias_elim_coverage`}{coverage of intervals recentered on
 #'     `mean(est)`, which separates interval width problems from bias}
 #'   \item{`rejection`}{proportion with `p < alpha`; power under an
 #'     alternative, type I error under the null}
+#'   \item{`mean_ci_width`}{`mean(ci_upper - ci_lower)`, with MCSE the
+#'     standard error of that mean. Read alongside `coverage`: an
+#'     interval can reach nominal coverage by being needlessly wide,
+#'     and the pair distinguishes that from a well-calibrated one.}
 #' }
 #' @export
 compute_performance <- function(results, theta = NULL, alpha = 0.05) {

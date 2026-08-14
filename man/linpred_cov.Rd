@@ -19,3 +19,10 @@ A covariance matrix on the linear-predictor scale.
 the random effects. Defined for every family, unlike \code{\link[=cov_at]{cov_at()}},
 which is the covariance of the response and therefore Gaussian-only.
 }
+\examples{
+# A Poisson GLMM with a random intercept and slope. `cov_at()` is
+# undefined here, but the linear predictor still has a covariance.
+g <- dgm_conditional(G = diag(c(4, 0.05)), sigma2 = NULL,
+                     family = poisson())
+linpred_cov(g, times = c(0, 3, 6))
+}

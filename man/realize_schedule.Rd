@@ -11,7 +11,7 @@ realize_schedule(schedule, enroll, close, extend = TRUE)
 requires a known \code{interval}, so schedules built from explicit
 \code{times} cannot be extended.}
 
-\item{enroll}{Numeric vector of enrolment times, one per subject.}
+\item{enroll}{Numeric vector of enrollment times, one per subject.}
 
 \item{close}{Numeric. Close-out calendar time, from \code{close_out()}.}
 
@@ -20,13 +20,31 @@ nominal final visit, up to close-out.}
 }
 \value{
 A data frame with one row per subject-visit actually
-observed, with columns \code{id}, \code{enroll}, \code{index}, \code{time} (study time
-since randomization), \code{calendar} (\code{enroll + time}), \code{phase}, \code{h},
-and \code{on_treatment}. Visits after close-out are dropped.
+observed, and columns
+\describe{
+\item{id}{subject index, \code{1} to \code{length(enroll)}, in the order
+\code{enroll} was given}
+\item{enroll}{that subject's enrollment time, repeated across
+their visits}
+\item{index}{visit index \code{j}, continuing past the nominal final
+index when the visit is an extension}
+\item{time}{study time since randomization, \code{index * interval}}
+\item{calendar}{\code{enroll + time}, the calendar time of the visit}
+\item{phase}{factor with levels \code{run_in}, \code{randomization},
+\code{treatment}, \code{common_close}; extended visits inherit the phase
+of the nominal final visit}
+\item{h}{phase indicator, \code{1} after randomization; \code{1} for all
+extended visits}
+\item{on_treatment}{logical; \code{FALSE} for all extended visits,
+since the nominal treatment period has ended}
+}
+Visits whose \code{calendar} exceeds \code{close} are dropped, so the number
+of rows per subject varies and the data frame is unbalanced by
+construction.
 }
 \description{
 Expands a nominal \code{trial_schedule} across subjects with given
-enrolment times, and marks which visits fall before the close-out
+enrollment times, and marks which visits fall before the close-out
 date. When \code{extend = TRUE} (the default) subjects enrolled before
 the last one continue to be observed past the nominal final visit,
 on the same spacing, up to close-out.
@@ -34,7 +52,7 @@ on the same spacing, up to close-out.
 \details{
 Under \code{rule = "lslv"} every subject completes at least the nominal
 schedule, and follow-up duration is a decreasing function of
-enrolment time. The resulting imbalance is informative: it is a
+enrollment time. The resulting imbalance is informative: it is a
 design feature of common close-out trials, and it is the mechanism
 by which the information fraction at an interim analysis is
 determined.
@@ -43,4 +61,23 @@ Visits during the extension inherit the phase of the nominal final
 visit. If the nominal schedule ends in a common close, extended
 visits are also \code{common_close}; if it ends on treatment, they are
 \code{treatment}.
+}
+\examples{
+set.seed(1)
+s <- trial_schedule(treatment = 4, interval = 3)
+
+# Accrue 20 subjects over 6 months, then close out when the last
+# of them completes the nominal 12-month schedule.
+e <- accrue(n = 20, period = 6, pattern = "uniform")
+cl <- close_out(e, s, rule = "lslv")
+rs <- realize_schedule(s, e, cl)
+head(rs, 3)
+
+# Follow-up is longest for the first enrolled and exactly nominal
+# for the last: the design feature that makes the data unbalanced.
+range(tapply(rs$time, rs$id, max))
+
+# Without extension every subject gets the nominal schedule only.
+fixed <- realize_schedule(s, e, cl, extend = FALSE)
+range(table(fixed$id))
 }

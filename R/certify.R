@@ -24,18 +24,31 @@
 #' represent a target covariance as `Z G Z' + sigma^2 I`, together with
 #' the construction that attains it.
 #'
-#' @param V A symmetric positive-definite covariance matrix.
+#' @param V A symmetric positive semi-definite covariance matrix. A
+#'   singular `V` is accepted: it simply certifies a `sigma2` of zero,
+#'   which is the noise-free case rather than an error.
 #' @param tol Numeric. Eigenvalues below this, after shifting, are
-#'   treated as zero.
+#'   treated as zero. Also the tolerance by which a slightly negative
+#'   eigenvalue is forgiven before `V` is rejected as not positive
+#'   semi-definite.
 #' @return An object of class `reach_certificate`, a list with
 #'   \describe{
-#'     \item{q_min}{minimum number of random effects}
-#'     \item{sigma2}{the residual variance attaining it}
-#'     \item{Z}{`p x q_min` matrix of loadings}
-#'     \item{G}{`q_min x q_min` diagonal random-effects covariance}
-#'     \item{eigenvalues}{spectrum of `V`}
-#'     \item{p}{dimension}
+#'     \item{q_min}{integer. The minimum number of random effects that
+#'       can represent `V` as `Z G Z' + sigma2 I`, namely the number of
+#'       eigenvalues exceeding `sigma2` by more than `tol`.}
+#'     \item{sigma2}{the residual variance attaining it: the smallest
+#'       eigenvalue of `V`, floored at zero.}
+#'     \item{Z}{a `p x q_min` matrix of loadings, the leading `q_min`
+#'       eigenvectors of `V`. Orthonormal, and in general *not* design
+#'       columns such as an intercept and a slope; see Details.}
+#'     \item{G}{a `q_min x q_min` diagonal matrix whose entries are the
+#'       leading eigenvalues shifted down by `sigma2`.}
+#'     \item{eigenvalues}{the full spectrum of `V`, all `p` values in
+#'       decreasing order.}
+#'     \item{p}{integer, the dimension of `V`.}
 #'   }
+#'   [reconstruct()] returns `Z G Z' + sigma2 I` from these, equal to
+#'   `V` to numerical precision whenever the certificate is exact.
 #' @details
 #' `q_min` is **necessary but not sufficient for a particular model**.
 #' The certificate lets `Z` be arbitrary, namely the eigenvectors of

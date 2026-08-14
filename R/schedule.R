@@ -129,9 +129,14 @@ print.trial_schedule <- function(x, ...) {
 #' equivalent and give different estimands; see Details.
 #'
 #' @param schedule A `trial_schedule`.
-#' @param arm Integer or logical vector of length `n`, the treatment
-#'   indicator `g_i` (1 = treatment, 0 = control), one entry per
-#'   subject.
+#' @param arm Arm allocation, one entry per subject, of length `n`.
+#'   Any vector `factor()` accepts: a factor is used as given, and
+#'   anything else (integer, character, logical) is coerced with
+#'   `factor()`. Arbitrarily many levels are supported, not just two,
+#'   so a three-arm dose-ranging design is written by supplying three
+#'   levels. The level ordering matters only through `reference`, which
+#'   defaults to the first level; every other level gets its own
+#'   treatment column.
 #' @param hinge Logical, length 1 or one entry per arm level. Whether
 #'   each arm's mean profile changes slope at randomization. `FALSE`
 #'   for the reference arm constrains its post-randomization slope to
@@ -144,12 +149,29 @@ print.trial_schedule <- function(x, ...) {
 #'   treatment column to zero during the common close, following
 #'   `res/04-runin-power-analysis`. `"retain"` holds the accumulated
 #'   treatment contribution constant after the last on-treatment visit.
-#' @return A data frame with `n * nrow(schedule)` rows and columns
-#'   `id`, `arm`, `index`, `time`, `phase`, and the model columns
-#'   `x_slope` (the common slope on every visit), `x_hinge` (the
-#'   reference arm's post-randomization slope increment, present only
-#'   when the reference arm is hinged), and one `x_trt_<level>` column
-#'   per non-reference arm.
+#' @return A data frame with `n * nrow(schedule)` rows, subjects
+#'   varying slowest and visits fastest, and columns
+#'   \describe{
+#'     \item{id}{subject index, `1` to `n`, in the order `arm` was
+#'       given}
+#'     \item{arm}{the arm factor, recycled across that subject's
+#'       visits}
+#'     \item{index, time, phase}{copied from `schedule`}
+#'     \item{x_slope}{the common slope column, equal to `time` on every
+#'       visit}
+#'     \item{x_hinge}{`h * time`, the reference arm's post-randomization
+#'       slope increment. Present only when the reference arm is hinged
+#'       **and** the schedule has a run-in phase (`J0 > 0`). With
+#'       `J0 = 0` the column would be aliased with `x_slope`, since
+#'       `h` differs from `1` only at the randomization visit where
+#'       `time` is zero, so it is omitted rather than handed over as a
+#'       rank-deficient design.}
+#'     \item{x_trt_<level>}{one column per non-reference arm level that
+#'       is hinged, holding the treatment-phase time for subjects in
+#'       that arm and zero otherwise. Non-hinged arms are skipped, so
+#'       there are as many such columns as there are hinged
+#'       non-reference levels, not one per non-reference level.}
+#'   }
 #' @details
 #' Under `"revert"` the treatment indicator is replaced by
 #' `g_i * I(1 <= j <= J1)`, so the mean for a treated subject returns to

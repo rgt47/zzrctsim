@@ -25,12 +25,12 @@ ever drop out. \code{psi0} is calibrated to achieve it. Ignored if
 to bypass calibration.}
 
 \item{psi1}{Numeric. Coefficient on the previously observed
-response, centred. Non-zero gives MAR.}
+response, centered. Non-zero gives MAR.}
 
 \item{psi2}{Numeric. Coefficient on the current, unobserved
-response, centred. Non-zero gives MNAR.}
+response, centered. Non-zero gives MNAR.}
 
-\item{center}{Numeric. Value at which the response is centred in the
+\item{center}{Numeric. Value at which the response is centered in the
 hazard. Defaults to the mean of the complete-data response, which
 keeps \code{psi0} interpretable as a baseline log-odds.}
 
@@ -57,8 +57,8 @@ MCAR, MAR and MNAR are the nested restrictions
 \code{psi1 = psi2 = 0}, \code{psi2 = 0}, and \code{psi2} free. MNAR therefore
 \emph{extends} MAR rather than replacing its history dependence.
 
-Centring at \code{c} matters: on an untransformed ADAS-Cog or CDR-SB
-scale an uncentred response saturates the logit, so that any
+Centering at \code{c} matters: on an untransformed ADAS-Cog or CDR-SB
+scale an uncentered response saturates the logit, so that any
 non-trivial \code{psi1} drives the dropout proportion to one regardless
 of the intended level.
 

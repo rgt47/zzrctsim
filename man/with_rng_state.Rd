@@ -18,3 +18,22 @@ The value of \code{expr}.
 Restores the caller's generator state afterwards, so a replicate can
 be re-run in isolation without disturbing anything else.
 }
+\examples{
+# The replay workflow. `run_simulation()` stores one RNG state per
+# replicate, so any single replicate can be regenerated on its own
+# for diagnosis, without re-running the whole study.
+sch <- trial_schedule(treatment = 4, interval = 3)
+arm <- factor(rep(c("placebo", "active"), each = 20),
+              levels = c("placebo", "active"))
+d <- runin_design(sch, arm, reference = "placebo")
+g <- dgm_conditional(G = diag(c(9, 0.04)), sigma2 = 4)
+bt <- c(x_slope = 0.5, x_trt_active = -0.25)
+gen <- function() generate_outcomes(d, g, beta = bt, intercept = 20)
+
+res <- run_simulation(B = 10, generate = gen, analyse = fit_ancova,
+                      estimand = estimand("change diff", -3))
+
+# Re-execute replicate 3 in isolation and recover its estimate.
+rep3 <- with_rng_state(attr(res, "streams")[[3]], gen())
+all.equal(fit_ancova(rep3)$estimate, res$estimate[3])
+}

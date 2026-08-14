@@ -91,8 +91,39 @@ cov_cs <- function(sd = 1, rho = 0.5) {
 #'   for the binomial family. `1` gives a binary outcome.
 #' @param theta Numeric. Dispersion for the negative binomial, in the
 #'   `size` parameterization of [stats::rnbinom()].
-#' @return An object of class `dgm`, with subclass
-#'   `dgm_conditional` or `dgm_marginal`.
+#' @return An object of class `dgm`. The two constructors return
+#'   different element sets, since they hold different
+#'   parameterizations.
+#'
+#'   `dgm_conditional()` returns a list of class
+#'   `c("dgm_conditional", "dgm")` with
+#'   \describe{
+#'     \item{G}{the `q x q` random-effects covariance, coerced to a
+#'       matrix}
+#'     \item{sigma2}{the residual variance; `NA_real_` for a
+#'       non-Gaussian family, whose conditional variance is set by its
+#'       mean}
+#'     \item{z}{the random-effects design function of time, as supplied}
+#'     \item{q}{integer, `nrow(G)`, the number of random effects}
+#'     \item{family}{the [stats::family()] object, after coercion from
+#'       a name or a generator}
+#'     \item{trials}{number of Bernoulli trials per observation, used
+#'       only by the binomial family}
+#'     \item{theta}{negative-binomial dispersion, or `NULL`}
+#'     \item{gaussian}{logical, whether the family is Gaussian; the
+#'       flag [cov_at()] and the generator branch on}
+#'   }
+#'
+#'   `dgm_marginal()` returns a list of class
+#'   `c("dgm_marginal", "dgm")` with either
+#'   \describe{
+#'     \item{Vfun}{the covariance function of time, when `V` was given
+#'       as a function, with `times` set to `NULL` so the object is
+#'       evaluable on any grid}
+#'     \item{V}{the covariance matrix, when `V` was given as a matrix}
+#'     \item{times}{the reference grid `V` refers to, in the matrix
+#'       case; [cov_at()] then refuses times off this grid}
+#'   }
 #' @details
 #' With a non-Gaussian family the response is drawn conditionally on
 #' the random effects: `b_i ~ N(0, G)`, then
@@ -247,6 +278,12 @@ cov_at.dgm_conditional <- function(dgm, times) {
 #' @param dgm A `dgm_conditional`.
 #' @param times Numeric vector of observation times.
 #' @return A covariance matrix on the linear-predictor scale.
+#' @examples
+#' # A Poisson GLMM with a random intercept and slope. `cov_at()` is
+#' # undefined here, but the linear predictor still has a covariance.
+#' g <- dgm_conditional(G = diag(c(4, 0.05)), sigma2 = NULL,
+#'                      family = poisson())
+#' linpred_cov(g, times = c(0, 3, 6))
 #' @export
 linpred_cov <- function(dgm, times) {
   stopifnot(inherits(dgm, "dgm_conditional"))

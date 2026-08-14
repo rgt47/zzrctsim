@@ -222,10 +222,10 @@ dropout_mechanism <- function(psi1 = 0, psi2 = 0) {
 #' @param psi0 Numeric. Intercept of the dropout logit. Supply directly
 #'   to bypass calibration.
 #' @param psi1 Numeric. Coefficient on the previously observed
-#'   response, centred. Non-zero gives MAR.
+#'   response, centered. Non-zero gives MAR.
 #' @param psi2 Numeric. Coefficient on the current, unobserved
-#'   response, centred. Non-zero gives MNAR.
-#' @param center Numeric. Value at which the response is centred in the
+#'   response, centered. Non-zero gives MNAR.
+#' @param center Numeric. Value at which the response is centered in the
 #'   hazard. Defaults to the mean of the complete-data response, which
 #'   keeps `psi0` interpretable as a baseline log-odds.
 #' @param from Numeric. Dropout is only permitted at visits with
@@ -243,8 +243,8 @@ dropout_mechanism <- function(psi1 = 0, psi2 = 0) {
 #' `psi1 = psi2 = 0`, `psi2 = 0`, and `psi2` free. MNAR therefore
 #' *extends* MAR rather than replacing its history dependence.
 #'
-#' Centring at `c` matters: on an untransformed ADAS-Cog or CDR-SB
-#' scale an uncentred response saturates the logit, so that any
+#' Centering at `c` matters: on an untransformed ADAS-Cog or CDR-SB
+#' scale an uncentered response saturates the logit, so that any
 #' non-trivial `psi1` drives the dropout proportion to one regardless
 #' of the intended level.
 #'

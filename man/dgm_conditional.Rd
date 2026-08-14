@@ -47,8 +47,39 @@ vector returning a covariance matrix.}
 is a matrix.}
 }
 \value{
-An object of class \code{dgm}, with subclass
-\code{dgm_conditional} or \code{dgm_marginal}.
+An object of class \code{dgm}. The two constructors return
+different element sets, since they hold different
+parameterizations.
+
+\code{dgm_conditional()} returns a list of class
+\code{c("dgm_conditional", "dgm")} with
+\describe{
+\item{G}{the \verb{q x q} random-effects covariance, coerced to a
+matrix}
+\item{sigma2}{the residual variance; \code{NA_real_} for a
+non-Gaussian family, whose conditional variance is set by its
+mean}
+\item{z}{the random-effects design function of time, as supplied}
+\item{q}{integer, \code{nrow(G)}, the number of random effects}
+\item{family}{the \code{\link[stats:family]{stats::family()}} object, after coercion from
+a name or a generator}
+\item{trials}{number of Bernoulli trials per observation, used
+only by the binomial family}
+\item{theta}{negative-binomial dispersion, or \code{NULL}}
+\item{gaussian}{logical, whether the family is Gaussian; the
+flag \code{\link[=cov_at]{cov_at()}} and the generator branch on}
+}
+
+\code{dgm_marginal()} returns a list of class
+\code{c("dgm_marginal", "dgm")} with either
+\describe{
+\item{Vfun}{the covariance function of time, when \code{V} was given
+as a function, with \code{times} set to \code{NULL} so the object is
+evaluable on any grid}
+\item{V}{the covariance matrix, when \code{V} was given as a matrix}
+\item{times}{the reference grid \code{V} refers to, in the matrix
+case; \code{\link[=cov_at]{cov_at()}} then refuses times off this grid}
+}
 }
 \description{
 \code{dgm_conditional()} declares random effects; \code{dgm_marginal()}

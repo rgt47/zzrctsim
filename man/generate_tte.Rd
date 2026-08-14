@@ -21,12 +21,35 @@ single value applied to every subject, or a vector of length
 by staggered accrual with a common close-out.}
 }
 \value{
-For a single event, \code{subjects} with \code{time} and \code{status}
-added (\code{status = 1} event, \code{0} censored). For recurrent events, a
-counting-process data frame with one row per interval and columns
-\code{id}, \code{tstart}, \code{tstop}, \code{status}, \code{enum}, plus the subject
-columns; this is the format \code{survival::coxph()} expects for
-Andersen-Gill models.
+A data frame, in one of two shapes.
+
+For a single event (\code{recurrent = FALSE}), \code{subjects} with two
+columns added:
+\describe{
+\item{time}{\verb{pmin(event time, followup)}, the observed
+follow-up}
+\item{status}{integer, \code{1} if the event was observed, \code{0} if
+administratively censored at \code{followup}}
+}
+
+For recurrent events, a counting-process data frame with one row
+per at-risk interval and columns
+\describe{
+\item{id}{subject identifier, repeated across that subject's
+intervals}
+\item{tstart, tstop}{the half-open interval \verb{(tstart, tstop]}}
+\item{status}{\code{1} if an event closed the interval, \code{0} if it was
+closed by the end of follow-up}
+\item{enum}{event sequence number within subject, from \code{1}}
+}
+followed by every column of \code{subjects} other than \code{id}. This is
+the format \code{survival::coxph()} expects for Andersen-Gill models.
+
+In both cases an \code{lp} attribute is attached: one entry per row of
+\code{subjects}, giving the linear predictor \verb{x_i'beta} \strong{including}
+the drawn frailty. It is retained because the realized frailty is
+otherwise unrecoverable, and a simulation comparing a conditional
+against a marginal hazard ratio needs it.
 }
 \description{
 Generate time-to-event outcomes
@@ -35,7 +58,7 @@ Generate time-to-event outcomes
 Administrative censoring from a common close-out is the natural
 companion to \code{\link[=accrue]{accrue()}} and \code{\link[=close_out]{close_out()}}: pass
 \code{followup = close - enroll} and each subject is censored at the
-study end, with follow-up decreasing in enrolment time.
+study end, with follow-up decreasing in enrollment time.
 }
 \examples{
 set.seed(1)

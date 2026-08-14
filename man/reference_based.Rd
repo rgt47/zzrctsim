@@ -33,7 +33,7 @@ a \code{discontinued} logical column added.
 \description{
 Modifies the mean trajectory after treatment discontinuation
 according to a pattern-mixture assumption. This is a \emph{generator}:
-it produces data whose true post-withdrawal behaviour follows the
+it produces data whose true post-withdrawal behavior follows the
 named assumption, so that analyses which assume something else can
 be evaluated for bias.
 }

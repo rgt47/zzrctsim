@@ -2,7 +2,7 @@
 % Please edit documentation in R/accrual.R
 \name{accrue}
 \alias{accrue}
-\title{Generate enrolment times}
+\title{Generate enrollment times}
 \usage{
 accrue(n, period, pattern = c("uniform", "linear", "poisson"))
 }
@@ -12,24 +12,24 @@ accrue(n, period, pattern = c("uniform", "linear", "poisson"))
 \item{period}{Numeric. Length of the accrual window, in the study
 time unit.}
 
-\item{pattern}{Character. \code{"uniform"} spreads enrolment evenly at
+\item{pattern}{Character. \code{"uniform"} spreads enrollment evenly at
 random over the window; \code{"linear"} places subjects at
 deterministic equally spaced times; \code{"poisson"} draws
 inter-arrival times from an exponential distribution with the rate
 implied by \code{n} and \code{period}.}
 }
 \value{
-Numeric vector of \code{n} enrolment times, sorted.
+Numeric vector of \code{n} enrollment times, sorted.
 }
 \description{
-Generate enrolment times
+Generate enrollment times
 }
 \details{
 \code{"uniform"} and \code{"linear"} return times within \verb{[0, period]}.
 \code{"poisson"} does not: it accumulates exponential inter-arrival
 times at rate \code{n / period}, so \code{period} sets the \emph{expected} span of
-the last enrolment and any particular realization may overrun it.
+the last enrollment and any particular realization may overrun it.
 That is the intended behavior of a Poisson process with a target
 rate, but it means a downstream \code{\link[=close_out]{close_out()}} driven by the last
-enrolment can fall after \code{period}.
+enrollment can fall after \code{period}.
 }

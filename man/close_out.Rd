@@ -7,7 +7,7 @@
 close_out(enroll, schedule, rule = c("lslv", "fixed"), at = NULL)
 }
 \arguments{
-\item{enroll}{Numeric vector of enrolment times.}
+\item{enroll}{Numeric vector of enrollment times.}
 
 \item{schedule}{A \code{trial_schedule}.}
 
@@ -19,8 +19,22 @@ when the last enrolled subject completes the nominal schedule.
 \code{rule = "fixed"}.}
 }
 \value{
-A single numeric calendar time.
+A single numeric calendar time: \code{max(enroll) + max(schedule$time)} under \code{"lslv"}, or \code{as.numeric(at)} under
+\code{"fixed"}. Pass it to \code{\link[=realize_schedule]{realize_schedule()}} as \code{close}.
 }
 \description{
 Determine the study close-out date
+}
+\examples{
+set.seed(1)
+s <- trial_schedule(treatment = 4, interval = 3)
+e <- accrue(n = 20, period = 6, pattern = "uniform")
+
+# Last subject, last visit: close 12 months after the final
+# enrollment, so every subject completes the nominal schedule.
+close_out(e, s, rule = "lslv")
+
+# A fixed calendar date instead: subjects enrolled late are
+# censored before completing.
+close_out(e, s, rule = "fixed", at = 15)
 }

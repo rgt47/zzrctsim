@@ -36,7 +36,11 @@ frame, as from \code{\link[=runin_design]{runin_design()}}.}
 
 \item{alpha}{Numeric. Two-sided significance level.}
 
-\item{intercept}{Numeric.}
+\item{intercept}{Numeric. The overall mean at time zero, passed to
+\code{\link[=generate_outcomes]{generate_outcomes()}}. It shifts every arm equally and so does not
+affect power for a contrast, but it does set the scale on which a
+response-dependent \code{dropout} hazard is centered, so it should be
+given a realistic value whenever \code{dropout} is used.}
 
 \item{dropout}{Optional list of arguments passed to
 \code{\link[=dropout_mask]{dropout_mask()}}, applied to each replicate.}
@@ -44,9 +48,38 @@ frame, as from \code{\link[=runin_design]{runin_design()}}.}
 \item{seed}{Integer. Master seed.}
 }
 \value{
-A data frame with \code{n_per_arm}, \code{method}, \code{power} and
-\code{mcse}.
+A data frame with one row per method in \code{analyse} and
+columns
+\describe{
+\item{n_per_arm}{the sample size evaluated, repeated down the
+rows}
+\item{method}{the fitter name; \code{"method"} when \code{analyse} was a
+bare function rather than a named list}
+\item{power}{the proportion of replicates with \code{p < alpha}, that
+is the \code{rejection} measure from \code{\link[=compute_performance]{compute_performance()}}. It is
+power only under an alternative; under the null it is the
+type I error rate.}
+\item{mcse}{the Monte Carlo standard error of \code{power}, the
+binomial \code{sqrt(power * (1 - power) / m)} over the \code{m}
+replicates that converged with a non-missing p-value}
+}
 }
 \description{
 Simulated power at a given sample size
+}
+\examples{
+design_fn <- function(n) {
+  a <- factor(rep(c("placebo", "active"), each = n),
+              levels = c("placebo", "active"))
+  runin_design(trial_schedule(treatment = 4, interval = 3), a,
+               reference = "placebo")
+}
+g <- dgm_conditional(G = diag(c(9, 0.04)), sigma2 = 4)
+bt <- c(x_slope = 0.5, x_trt_active = -0.25)
+es <- estimand("difference in change at month 12", -3)
+
+# B is far too small for a real study; see `nsim_for_mcse()`.
+sim_power(n_per_arm = 30, design_fn = design_fn, dgm = g,
+          beta = bt, estimand = es, analyse = fit_ancova,
+          B = 20, intercept = 20)
 }
