@@ -97,6 +97,11 @@ print.power_curve <- function(x, ...) {
 #' chosen size, which is the number to quote. If the confirmation MCSE
 #' is large relative to the distance from `target`, raise `B`; see
 #' [nsim_for_mcse()].
+#'
+#' The confirmation run uses a different RNG stream from the curve
+#' (the curve's seed, offset by one), so that it is an independent
+#' check of the selected size rather than a re-reading of the
+#' replicates that selected it.
 #' @export
 sample_size <- function(target = 0.80, n_grid, confirm_B = 2000L, ...) {
   stopifnot(target > 0, target < 1, length(n_grid) >= 2)
@@ -142,6 +147,17 @@ sample_size <- function(target = 0.80, n_grid, confirm_B = 2000L, ...) {
     # `B` may already be present in `...` for the curve; the
     # confirmation run overrides it.
     dots$B <- confirm_B
+    # The confirmation must also use a different RNG stream. Reusing
+    # the curve's seed would draw the same replicates that produced
+    # the interpolated `n_sel`, so the "confirmed" power would share
+    # its Monte Carlo error with the selection rather than providing
+    # an independent check of it.
+    curve_seed <- if (is.null(dots$seed)) {
+      eval(formals(sim_power)$seed)
+    } else {
+      dots$seed
+    }
+    dots$seed <- as.integer(curve_seed) + 1L
     confirmation <- do.call(sim_power,
                             c(list(n_per_arm = n_sel), dots))
   }

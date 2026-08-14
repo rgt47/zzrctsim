@@ -170,7 +170,13 @@ dropout_mask <- function(dat,
   tv <- dat$time[k]
   elig <- which(tv > from)
   if (!length(elig)) return(numeric(0))
-  prev <- ifelse(elig > 1L, yv[pmax(elig - 1L, 1L)], yv[elig])
+  # At a visit with no predecessor there is no previously observed
+  # response to condition on, so the history term contributes nothing:
+  # `prev` is set to `center`, making `psi1 * (prev - center)` zero.
+  # Substituting the *current* response here instead would make the
+  # hazard depend on an unobserved value, which is MNAR, while the
+  # mechanism would still be reported as MAR.
+  prev <- ifelse(elig > 1L, yv[pmax(elig - 1L, 1L)], center)
   eta <- psi0 + psi1 * (prev - center) + psi2 * (yv[elig] - center)
   if (!is.null(psi_cov)) {
     for (nm in names(psi_cov)) {
@@ -335,7 +341,15 @@ reference_based <- function(dat, mask,
 
   key_d <- paste(dat$id, dat$time)
   key_m <- paste(mask$id, mask$time)
-  is_missing <- mask$missing[match(key_d, key_m)]
+  idx <- match(key_d, key_m)
+  # Same check as `apply_mask()`: unmatched rows would otherwise give
+  # NA in `is_missing` and fail later at `if (!any(mi))` with
+  # "missing value where TRUE/FALSE needed".
+  if (anyNA(idx)) {
+    stop("Mask does not cover every row of `dat`: ",
+         sum(is.na(idx)), " unmatched id/time combinations.")
+  }
+  is_missing <- mask$missing[idx]
 
   for (i in unique(dat$id)) {
     k <- which(dat$id == i)

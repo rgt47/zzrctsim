@@ -21,8 +21,17 @@ if absent from \code{design}.}
 \item{intercept}{Numeric. Overall mean at time zero.}
 }
 \value{
-\code{design} with two columns added: \code{mu}, the fixed-effect mean,
-and \code{y}, the generated outcome.
+\code{design} with \code{mu}, the fixed-effect mean, and \code{y}, the
+generated outcome, added. Every path additionally attaches the
+attributes \code{beta}, \code{intercept}, and \code{family}, which
+\code{\link[=reference_based]{reference_based()}} requires.
+
+Two paths add more. A non-Gaussian \code{dgm_conditional} (the GLMM
+construction) also adds the columns \code{eta}, the linear predictor,
+and \code{cmean}, the conditional mean on the response scale, plus a
+\code{ranef} attribute holding the drawn random effects. A
+\code{dgm_mixture} also adds the column \code{component}, the latent class
+each subject was drawn from, and an attribute of the same name.
 }
 \description{
 Generate outcomes for a trial

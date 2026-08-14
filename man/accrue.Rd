@@ -10,7 +10,7 @@ accrue(n, period, pattern = c("uniform", "linear", "poisson"))
 \item{n}{Integer. Number of subjects.}
 
 \item{period}{Numeric. Length of the accrual window, in the study
-time unit. Enrolment times fall in \verb{[0, period]}.}
+time unit.}
 
 \item{pattern}{Character. \code{"uniform"} spreads enrolment evenly at
 random over the window; \code{"linear"} places subjects at
@@ -23,4 +23,13 @@ Numeric vector of \code{n} enrolment times, sorted.
 }
 \description{
 Generate enrolment times
+}
+\details{
+\code{"uniform"} and \code{"linear"} return times within \verb{[0, period]}.
+\code{"poisson"} does not: it accumulates exponential inter-arrival
+times at rate \code{n / period}, so \code{period} sets the \emph{expected} span of
+the last enrolment and any particular realization may overrun it.
+That is the intended behavior of a Poisson process with a target
+rate, but it means a downstream \code{\link[=close_out]{close_out()}} driven by the last
+enrolment can fall after \code{period}.
 }

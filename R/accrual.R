@@ -16,13 +16,21 @@
 #'
 #' @param n Integer. Number of subjects.
 #' @param period Numeric. Length of the accrual window, in the study
-#'   time unit. Enrolment times fall in `[0, period]`.
+#'   time unit.
 #' @param pattern Character. `"uniform"` spreads enrolment evenly at
 #'   random over the window; `"linear"` places subjects at
 #'   deterministic equally spaced times; `"poisson"` draws
 #'   inter-arrival times from an exponential distribution with the rate
 #'   implied by `n` and `period`.
 #' @return Numeric vector of `n` enrolment times, sorted.
+#' @details
+#' `"uniform"` and `"linear"` return times within `[0, period]`.
+#' `"poisson"` does not: it accumulates exponential inter-arrival
+#' times at rate `n / period`, so `period` sets the *expected* span of
+#' the last enrolment and any particular realization may overrun it.
+#' That is the intended behavior of a Poisson process with a target
+#' rate, but it means a downstream [close_out()] driven by the last
+#' enrolment can fall after `period`.
 #' @export
 accrue <- function(n, period,
                    pattern = c("uniform", "linear", "poisson")) {

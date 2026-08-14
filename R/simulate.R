@@ -93,6 +93,15 @@ null_fit <- function(converged = FALSE) {
 #' @export
 fit_ancova <- function(dat, visit_time = NULL, reference = NULL,
                        level = 0.95) {
+  if (!is.data.frame(dat)) {
+    stop("`dat` must be a data frame of one row per subject-visit.")
+  }
+  need <- c("id", "time", "arm", "y")
+  absent <- setdiff(need, names(dat))
+  if (length(absent)) {
+    stop("`dat` is missing required column(s): ",
+         paste(absent, collapse = ", "), ".")
+  }
   if (is.null(visit_time)) visit_time <- max(dat$time)
   base <- dat[abs(dat$time) < .Machine$double.eps^0.5, ]
   post <- dat[abs(dat$time - visit_time) < .Machine$double.eps^0.5, ]
@@ -114,8 +123,19 @@ fit_ancova <- function(dat, visit_time = NULL, reference = NULL,
   if (is.null(fit)) return(null_fit())
 
   cf <- summary(fit)$coefficients
-  trm <- grep("^arm", rownames(cf), value = TRUE)[1]
+  arm_trms <- grep("^arm", rownames(cf), value = TRUE)
+  trm <- arm_trms[1]
   if (is.na(trm)) return(null_fit())
+  # A `fit_result` carries a single contrast. With three or more arms
+  # the model fits several, and returning the first without saying so
+  # would silently discard the rest.
+  if (length(arm_trms) > 1L) {
+    warning("`fit_ancova()` returns a single contrast, but ",
+            length(arm_trms), " were fitted (",
+            paste(arm_trms, collapse = ", "), "). Reporting ", trm,
+            " only; call it once per contrast, with `reference` set, ",
+            "to obtain the others.")
+  }
 
   fit_result(estimate = cf[trm, "Estimate"],
              se = cf[trm, "Std. Error"],
@@ -154,7 +174,26 @@ run_simulation <- function(B, generate, analyse, estimand,
                            seed = 20260810L) {
   stopifnot(B >= 1, is.function(generate))
   if (is.function(analyse)) analyse <- list(method = analyse)
-  stopifnot(is.list(analyse), !is.null(names(analyse)))
+  if (!is.list(analyse) || !length(analyse)) {
+    stop("`analyse` must be a function or a non-empty list of ",
+         "functions, one per analysis method.")
+  }
+  # Every element must be named, not merely some: results are collected
+  # by name, so an unnamed element is silently dropped and surfaces
+  # later as a confusing row-count mismatch.
+  nms <- names(analyse)
+  unnamed <- if (is.null(nms)) seq_along(analyse) else which(!nzchar(nms))
+  if (length(unnamed)) {
+    stop("`analyse` must be a fully named list; element(s) ",
+         paste(unnamed, collapse = ", "), " have no name.")
+  }
+  if (!all(vapply(analyse, is.function, logical(1)))) {
+    stop("Every element of `analyse` must be a function; ",
+         "element(s) ",
+         paste(names(analyse)[!vapply(analyse, is.function,
+                                      logical(1))],
+               collapse = ", "), " are not.")
+  }
   stopifnot(inherits(estimand, "estimand"))
 
   streams <- sim_streams(B, seed)

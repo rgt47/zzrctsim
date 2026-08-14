@@ -23,8 +23,17 @@
 #'   columns of `design`; an `"(Intercept)"` entry is added implicitly
 #'   if absent from `design`.
 #' @param intercept Numeric. Overall mean at time zero.
-#' @return `design` with two columns added: `mu`, the fixed-effect mean,
-#'   and `y`, the generated outcome.
+#' @return `design` with `mu`, the fixed-effect mean, and `y`, the
+#'   generated outcome, added. Every path additionally attaches the
+#'   attributes `beta`, `intercept`, and `family`, which
+#'   [reference_based()] requires.
+#'
+#'   Two paths add more. A non-Gaussian `dgm_conditional` (the GLMM
+#'   construction) also adds the columns `eta`, the linear predictor,
+#'   and `cmean`, the conditional mean on the response scale, plus a
+#'   `ranef` attribute holding the drawn random effects. A
+#'   `dgm_mixture` also adds the column `component`, the latent class
+#'   each subject was drawn from, and an attribute of the same name.
 #' @details
 #' Draws are made per subject from a multivariate normal with mean
 #' `mu` and covariance `cov_at(dgm, times_i)`. Subjects with a single
@@ -57,19 +66,25 @@ generate_outcomes <- function(design, dgm, beta, intercept = 0) {
   # because no multivariate analogue of the binomial or Poisson exists.
   # The random effects are therefore drawn explicitly and the response
   # conditionally, which is the GLMM construction.
-  if (inherits(dgm, "dgm_conditional") && !isTRUE(dgm$gaussian)) {
-    return(.generate_glmm(design, dgm))
+  out <- if (inherits(dgm, "dgm_conditional") && !isTRUE(dgm$gaussian)) {
+    .generate_glmm(design, dgm)
+  } else if (inherits(dgm, "dgm_mixture")) {
+    .generate_mixture(design, dgm)
+  } else {
+    design$y <- .draw_gaussian(design, dgm)
+    attr(design, "family") <- "gaussian"
+    design
   }
 
-  if (inherits(dgm, "dgm_mixture")) {
-    return(.generate_mixture(design, dgm))
-  }
-
-  design$y <- .draw_gaussian(design, dgm)
-  attr(design, "beta") <- beta
-  attr(design, "intercept") <- intercept
-  attr(design, "family") <- "gaussian"
-  design
+  # `beta` and `intercept` are attached here rather than inside each
+  # branch, so that every generated data set carries them regardless of
+  # which generator produced it. `reference_based()` requires both, and
+  # attaching them on the Gaussian path alone silently restricted that
+  # function to Gaussian data. `family` is set by each branch, since
+  # only the branch knows it.
+  attr(out, "beta") <- beta
+  attr(out, "intercept") <- intercept
+  out
 }
 
 
@@ -173,7 +188,11 @@ dropout_mechanism <- function(psi1 = 0, psi2 = 0) {
     tv <- dat$time[k]
     elig <- which(tv > from)
     if (!length(elig)) return(numeric(0))
-    prev <- ifelse(elig > 1L, yv[pmax(elig - 1L, 1L)], yv[elig])
+    # No predecessor means no previously observed response to condition
+    # on, so the history term contributes nothing. Using the current
+    # response here instead would be MNAR while still reporting MAR.
+    # See the matching note in `.haz_rows()` in R/missing.R.
+    prev <- ifelse(elig > 1L, yv[pmax(elig - 1L, 1L)], center)
     stats::plogis(psi0 + psi1 * (prev - center) +
                     psi2 * (yv[elig] - center))
   })
@@ -257,6 +276,12 @@ apply_dropout <- function(dat,
   .check_family_for_hazard(dat, psi1, psi2, center)
   if (is.null(center)) center <- mean(dat$y, na.rm = TRUE)
 
+  # Recorded before `psi0` is overwritten by calibration below, so the
+  # spec can say whether `target` was actually used. Supplying `psi0`
+  # bypasses calibration, and reporting the default `target` in that
+  # case would misdescribe the mechanism that was applied.
+  calibrated <- is.null(psi0)
+
   if (is.null(psi0)) {
     stopifnot(target > 0, target < 1)
     f <- function(p) {
@@ -278,7 +303,7 @@ apply_dropout <- function(dat,
   spec <- list(psi0 = psi0, psi1 = psi1, psi2 = psi2,
                center = center,
                mechanism = dropout_mechanism(psi1, psi2),
-               target = if (is.null(target)) NA_real_ else target,
+               target = if (calibrated) target else NA_real_,
                expected = expected)
 
   dat$dropped <- FALSE

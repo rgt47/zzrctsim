@@ -53,6 +53,17 @@ trial_schedule <- function(run_in = 0L,
   if (is.null(times)) {
     stopifnot(run_in >= 0, treatment >= 1, common_close >= 0,
               interval > 0)
+    # Visit counts are counts. A fractional value would otherwise be
+    # truncated silently by `as.integer()` below, so that
+    # `treatment = 2.5` quietly became 2.
+    frac <- c(run_in = run_in, treatment = treatment,
+              common_close = common_close)
+    bad <- frac[frac != trunc(frac)]
+    if (length(bad)) {
+      stop("Visit counts must be whole numbers; got ",
+           paste(names(bad), "=", format(bad), collapse = ", "),
+           ". Use `times` to specify a non-integer visit grid.")
+    }
     j <- seq.int(-run_in, treatment + common_close)
     t_j <- j * interval
     J0 <- as.integer(run_in)

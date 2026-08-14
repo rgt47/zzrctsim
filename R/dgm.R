@@ -28,7 +28,18 @@
 NULL
 
 .sd_at <- function(sd, t) {
-  if (is.function(sd)) sd(t) else rep(sd, length.out = length(t))
+  if (is.function(sd)) return(sd(t))
+  # A scalar is broadcast, but a vector must match the grid exactly.
+  # Partial recycling is refused: these covariances are evaluated on
+  # subject-specific grids of varying length under staggered accrual,
+  # where a recycled `sd` silently assigns the wrong variance to the
+  # wrong visit.
+  if (length(sd) != 1L && length(sd) != length(t)) {
+    stop("`sd` has length ", length(sd), " but the time grid has ",
+         length(t), " point(s); supply a scalar, a vector of matching ",
+         "length, or a function of time.")
+  }
+  rep(sd, length.out = length(t))
 }
 
 #' @rdname cov_structures
@@ -182,6 +193,15 @@ dgm_marginal <- function(V, times = NULL) {
   stopifnot(nrow(V) == length(times))
   if (!isSymmetric(unname(V), tol = sqrt(.Machine$double.eps))) {
     stop("`V` must be symmetric.")
+  }
+  # Checked here rather than left to the draw: a non-PSD `V` otherwise
+  # fails inside MASS::mvrnorm once per replicate, deep in the call
+  # stack and with no mention of `V` or of this constructor.
+  ev <- eigen(V, symmetric = TRUE, only.values = TRUE)$values
+  tol <- sqrt(.Machine$double.eps) * max(1, abs(ev[1]))
+  if (any(ev < -tol)) {
+    stop("`V` must be positive semi-definite; its smallest ",
+         "eigenvalue is ", format(min(ev), digits = 4), ".")
   }
   structure(list(V = V, times = times),
             class = c("dgm_marginal", "dgm"))

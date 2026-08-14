@@ -33,4 +33,9 @@ The confirmation run reports the achieved power with its MCSE at the
 chosen size, which is the number to quote. If the confirmation MCSE
 is large relative to the distance from \code{target}, raise \code{B}; see
 \code{\link[=nsim_for_mcse]{nsim_for_mcse()}}.
+
+The confirmation run uses a different RNG stream from the curve
+(the curve's seed, offset by one), so that it is an independent
+check of the selected size rather than a re-reading of the
+replicates that selected it.
 }
