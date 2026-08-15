@@ -236,3 +236,45 @@ expect_error(
               design_fn = mk_design, dgm = gd, beta = b, estimand = es,
               analyze = anc, B = 20L, intercept = 20, seed = 1L),
   info = 'a grid of one point cannot bracket the answer')
+
+# ---- sample_size() returns the SMALLEST size attaining target -------
+#
+# `approx(ties = "ordered")` returns the last of a tied run, so a curve
+# that saturates -- power 1.000 repeated across sizes, which is routine
+# -- previously yielded the largest tied size. The documented contract
+# is the smallest. These exercise the selection arithmetic directly, so
+# they are deterministic and carry no Monte Carlo error.
+
+pick <- function(n, p, target) {
+  curve <- data.frame(n_per_arm = n, method = "m", power = p, mcse = 0)
+  by_n <- curve[order(curve$n_per_arm), ]
+  o <- order(curve$power)
+  n_hat <- stats::approx(x = curve$power[o], y = curve$n_per_arm[o],
+                         xout = target, ties = "ordered")$y
+  sel <- as.integer(ceiling(n_hat))
+  attains <- by_n$n_per_arm[by_n$power >= target]
+  if (length(attains)) sel <- as.integer(min(sel, min(attains)))
+  sel
+}
+
+expect_equal(pick(c(50, 100, 150, 200), c(0.6, 0.9, 0.9, 0.9), 0.9),
+             100L,
+             info = 'tied curve gives the smallest attaining size')
+expect_equal(pick(c(50, 100, 150, 200), c(0.5, 0.8, 0.9, 0.95), 0.8),
+             100L,
+             info = 'an exact hit on the grid is returned as is')
+expect_equal(pick(c(50, 100, 150, 200), c(0.5, 0.7, 0.85, 0.95), 0.8),
+             134L,
+             info = 'interpolation between grid points is preserved')
+
+# A non-monotone curve is detected. The warning itself needs a curve
+# with a Monte Carlo dip, which is seed-dependent and would make a
+# flaky test, so the detection condition is exercised directly.
+nonmono <- data.frame(n_per_arm = c(50, 100, 150, 200),
+                      power = c(0.70, 0.95, 0.94, 0.99))
+expect_true(is.unsorted(nonmono$power[order(nonmono$n_per_arm)]),
+            info = 'a dipping curve is detected as non-monotone')
+mono <- data.frame(n_per_arm = c(50, 100, 150, 200),
+                   power = c(0.50, 0.70, 0.85, 0.95))
+expect_false(is.unsorted(mono$power[order(mono$n_per_arm)]),
+             info = 'a clean curve is not flagged')

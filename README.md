@@ -41,7 +41,15 @@ arm <- factor(rep(c("placebo", "active"), each = 100),
               levels = c("placebo", "active"))
 d <- runin_design(s, arm, reference = "placebo")
 
-# 2. Data-generating mechanism: random intercept and slope.
+# The design carries the model columns your `beta` will name. Look at
+# them before writing step 3 -- `x_slope` is the common slope and
+# `x_trt_active` the treatment effect on the rate of change.
+names(d)
+#> "id" "arm" "index" "time" "phase" "x_slope" "x_trt_active"
+
+# 2. Data-generating mechanism: a random intercept (variance 9) and a
+#    random slope (variance 0.04), in the order the default
+#    `z = function(t) cbind(1, t)` gives them, plus residual variance 4.
 g <- dgm_conditional(G = diag(c(9, 0.04)), sigma2 = 4)
 
 # 3. Generation: draw one trial.
@@ -84,7 +92,7 @@ design_fn <- function(n) {
                reference = "placebo")
 }
 sample_size(
-  target = 0.80, n_grid = c(50, 100, 150, 200),
+  target = 0.80, n_grid = c(10, 15, 20, 30),
   design_fn = design_fn, dgm = g, beta = b, intercept = 20,
   estimand = estimand("final contrast", theta),
   analyze = list(ancova = function(z)

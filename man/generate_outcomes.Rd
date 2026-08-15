@@ -8,9 +8,10 @@ generate_outcomes(design, dgm, beta, intercept = 0)
 }
 \arguments{
 \item{design}{A data frame of one row per subject-visit, as returned
-by \code{\link[=runin_design]{runin_design()}} or by \code{\link[=realize_schedule]{realize_schedule()}} passed through
-\code{\link[=runin_design]{runin_design()}}. Must contain \code{id} and \code{time}, plus any columns
-named in \code{beta}.}
+by \code{\link[=runin_design]{runin_design()}} -- either from a balanced \code{\link[=trial_schedule]{trial_schedule()}},
+or from a ragged \code{\link[=realize_schedule]{realize_schedule()}} under staggered accrual,
+which \code{\link[=runin_design]{runin_design()}} also accepts. Must contain \code{id} and
+\code{time}, plus any columns named in \code{beta}.}
 
 \item{dgm}{A \code{dgm} object supplying the within-subject covariance.}
 

@@ -147,3 +147,30 @@ expect_true(any(abs(cr$mu[k] - out$mu[k]) > 1e-8),
 expect_error(reference_based(out, m_ref, method = "j2r",
                              trt_cols = character(0)),
              info = 'missing treatment columns is an error')
+
+# ---- apply_mask() must not fabricate the response column ------------
+#
+# `dat[[response]][m] <- NA_real_` creates the column when absent, so a
+# typo in `response=` silently produced an all-NA outcome that then
+# presented downstream as non-convergence rather than as an error.
+
+set.seed(4)
+s_am <- trial_schedule(treatment = 4, interval = 3)
+d_am <- runin_design(s_am, factor(rep(c("a", "b"), each = 15)),
+                     reference = "a")
+g_am <- dgm_conditional(G = diag(c(4, 0.02)), sigma2 = 2)
+dat_am <- generate_outcomes(d_am, g_am,
+                            beta = c(x_slope = 0.4, x_trt_b = -0.2),
+                            intercept = 10)
+mk_am <- dropout_mask(dat_am, target = 0.3)
+
+no_y <- dat_am
+no_y$y <- NULL
+expect_error(apply_mask(no_y, mk_am), pattern = "must name a column",
+             info = 'absent response column is refused, not created')
+expect_error(apply_mask(dat_am, mk_am, response = "yy"),
+             pattern = "must name a column",
+             info = 'a misspelled response is refused')
+ok_am <- apply_mask(dat_am, mk_am)
+expect_true(any(is.na(ok_am$y)),
+            info = 'the ordinary path still masks')

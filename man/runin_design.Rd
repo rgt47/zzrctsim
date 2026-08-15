@@ -13,7 +13,12 @@ runin_design(
 )
 }
 \arguments{
-\item{schedule}{A \code{trial_schedule}.}
+\item{schedule}{Either a \code{trial_schedule} from \code{\link[=trial_schedule]{trial_schedule()}},
+giving every subject the same visit grid, or a
+\code{realized_schedule} from \code{\link[=realize_schedule]{realize_schedule()}}, giving each
+subject the grid their enrollment date and the common close-out
+allow. The second is the staggered-accrual path, and produces a
+ragged design with differing numbers of rows per subject.}
 
 \item{arm}{Arm allocation, one entry per subject, of length \code{n}.
 Any vector \code{factor()} accepts: a factor is used as given, and
@@ -40,11 +45,22 @@ treatment column to zero during the common close, following
 treatment contribution constant after the last on-treatment visit.}
 }
 \value{
-A data frame with \code{n * nrow(schedule)} rows, subjects
-varying slowest and visits fastest, and columns
+A data frame with one row per subject-visit and columns as
+below. From a \code{trial_schedule} there are \code{n * nrow(schedule)}
+rows, subjects varying slowest and visits fastest. From a
+\code{realized_schedule} the frame is ragged -- each subject keeps the
+visits their enrollment date allowed -- and the row order is that
+of the realized schedule.
+
+Note when analyzing a ragged design: \code{fit_ancova()} defaults to
+\code{max(dat$time)}, which under staggered accrual only the earliest
+enrollees reach. Pass \code{visit_time} explicitly, normally the last
+nominal visit of the original schedule, or the fit will be based
+on a handful of subjects and may return \code{\link[=null_fit]{null_fit()}}.
 \describe{
-\item{id}{subject index, \code{1} to \code{n}, in the order \code{arm} was
-given}
+\item{id}{subject index. From a \code{trial_schedule}, \code{1} to \code{n} in
+the order \code{arm} was given; from a \code{realized_schedule}, the
+\code{id} of that schedule, with \code{arm} matched to it by position}
 \item{arm}{the arm factor, recycled across that subject's
 visits}
 \item{index, time, phase}{copied from \code{schedule}}

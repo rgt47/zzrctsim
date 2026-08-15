@@ -154,11 +154,22 @@ print.trial_schedule <- function(x, ...) {
 #'   treatment column to zero during the common close, following
 #'   `res/04-runin-power-analysis`. `"retain"` holds the accumulated
 #'   treatment contribution constant after the last on-treatment visit.
-#' @return A data frame with `n * nrow(schedule)` rows, subjects
-#'   varying slowest and visits fastest, and columns
+#' @return A data frame with one row per subject-visit and columns as
+#'   below. From a `trial_schedule` there are `n * nrow(schedule)`
+#'   rows, subjects varying slowest and visits fastest. From a
+#'   `realized_schedule` the frame is ragged -- each subject keeps the
+#'   visits their enrollment date allowed -- and the row order is that
+#'   of the realized schedule.
+#'
+#'   Note when analyzing a ragged design: `fit_ancova()` defaults to
+#'   `max(dat$time)`, which under staggered accrual only the earliest
+#'   enrollees reach. Pass `visit_time` explicitly, normally the last
+#'   nominal visit of the original schedule, or the fit will be based
+#'   on a handful of subjects and may return [null_fit()].
 #'   \describe{
-#'     \item{id}{subject index, `1` to `n`, in the order `arm` was
-#'       given}
+#'     \item{id}{subject index. From a `trial_schedule`, `1` to `n` in
+#'       the order `arm` was given; from a `realized_schedule`, the
+#'       `id` of that schedule, with `arm` matched to it by position}
 #'     \item{arm}{the arm factor, recycled across that subject's
 #'       visits}
 #'     \item{index, time, phase}{copied from `schedule`}

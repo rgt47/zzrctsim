@@ -11,7 +11,8 @@ apply_mask(dat, mask, response = "y")
 
 \item{mask}{A \code{missing_mask}, or a logical vector of \code{nrow(dat)}.}
 
-\item{response}{Character. Column to set to \code{NA}.}
+\item{response}{Character. Column to set to \code{NA}. Must name an
+existing column of \code{dat}.}
 }
 \value{
 \code{dat} with masked entries set to \code{NA} and a \code{missing}

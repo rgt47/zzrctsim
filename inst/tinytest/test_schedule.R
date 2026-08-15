@@ -118,3 +118,55 @@ expect_true(all(table(r0$id) <= nrow(s2)),
 # Explicit-times schedules cannot be extended: no spacing is defined.
 expect_error(realize_schedule(su, e, cl, extend = TRUE),
              info = 'extension requires an equally spaced schedule')
+
+# ---- staggered accrual reaches the generation stage -----------------
+#
+# `realize_schedule()` used to dead-end: it returned a plain ragged
+# data frame that `runin_design()` refused, so the staggered-accrual
+# branch advertised in DESCRIPTION had no route into a DGM. It now
+# carries the phase boundaries forward and `runin_design()` accepts
+# it, so this whole path must keep working end to end.
+
+set.seed(7)
+s_acc <- trial_schedule(run_in = 1, treatment = 4, interval = 3)
+e_acc <- accrue(40, period = 12, pattern = "uniform")
+cl_acc <- close_out(e_acc, s_acc, rule = "lslv")
+rs_acc <- realize_schedule(s_acc, e_acc, cl_acc)
+
+expect_inherits(rs_acc, "realized_schedule",
+                info = 'realize_schedule is classed for runin_design')
+expect_equal(attr(rs_acc, "J1"), attr(s_acc, "J1"),
+             info = 'phase boundaries carried forward')
+
+arm_acc <- factor(rep(c("placebo", "active"), each = 20),
+                  levels = c("placebo", "active"))
+d_acc <- runin_design(rs_acc, arm_acc, reference = "placebo")
+
+expect_true(all(c("x_slope", "x_hinge", "x_trt_active") %in%
+                  names(d_acc)),
+            info = 'ragged design gets the same model columns')
+expect_equal(length(unique(d_acc$id)), 40L,
+             info = 'one subject per arm entry')
+expect_true(length(unique(table(d_acc$id))) > 1L,
+            info = 'design is genuinely ragged under staggered entry')
+# `arm` is per subject, not per row: every row of a subject agrees.
+expect_true(all(vapply(split(as.character(d_acc$arm), d_acc$id),
+                       function(a) length(unique(a)) == 1L,
+                       logical(1))),
+            info = 'arm is constant within subject')
+
+g_acc <- dgm_conditional(G = diag(c(9, 0.04)), sigma2 = 4)
+dat_acc <- generate_outcomes(
+  d_acc, g_acc,
+  beta = c(x_slope = 0.5, x_hinge = -0.1, x_trt_active = -0.25),
+  intercept = 20)
+expect_equal(nrow(dat_acc), nrow(d_acc),
+             info = 'generation accepts the ragged design')
+expect_true(all(!is.na(dat_acc$y)),
+            info = 'every ragged row gets an outcome')
+
+# A non-schedule first argument is refused by name, not by a bare
+# stopifnot echo.
+expect_error(runin_design(data.frame(a = 1), arm_acc),
+             pattern = "schedule",
+             info = 'runin_design names the offending argument')
