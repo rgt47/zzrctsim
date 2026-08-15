@@ -81,11 +81,18 @@ non-reference levels, not one per non-reference level.}
 }
 }
 \description{
-Constructs the three slope columns of the model
-`Y_ij = alpha + a_i + (delta (1 - h_j) + beta h_j + gamma h_j g_i
-\itemize{
-\item b_i) t_j + w_ij`, expanded over subjects.
-}
+Constructs the slope columns of the model
+\deqn{Y_{ij} = \alpha + a_i + (\delta (1 - h_j) + \beta h_j +
+  \gamma h_j g_i + b_i) t_j + w_{ij}}{Y_ij = alpha + a_i +
+  (delta (1 - h_j) + beta h_j + gamma h_j g_i + b_i) t_j + w_ij}
+expanded over subjects, where \eqn{h_j} is the post-randomization
+indicator, \eqn{g_i} the arm indicator, \eqn{t_j} the visit time,
+\eqn{a_i} and \eqn{b_i} subject-level random intercept and slope,
+and \eqn{w_{ij}}{w_ij} residual error. The returned columns carry the
+coefficients \eqn{\delta} (\code{x_slope}, the pre-randomization
+slope), \eqn{\beta} (\code{x_hinge}, the reference arm's change of
+slope at randomization), and \eqn{\gamma} (\verb{x_trt_<level>}, the
+treatment effect on the rate of change).
 }
 \details{
 The \code{common_close} argument selects how the treatment column behaves
