@@ -156,16 +156,22 @@ compute_performance <- function(results, theta = NULL, alpha = 0.05) {
 nsim_for_mcse <- function(measure = c("proportion", "bias"),
                           mcse, p = 0.5, sd = 1) {
   measure <- match.arg(measure)
-  if (!is.numeric(mcse) || length(mcse) != 1L) {
-    stop("`mcse` must be a single number, but it is a ",
-         class(mcse)[1], " of length ", length(mcse),
-         ". Supply the target Monte Carlo standard error, ",
-         "for example 0.005.",
+  # Vectorized in `mcse` on purpose: asking for the replicate count at
+  # several precision targets at once is the natural way to read this
+  # off, and the arithmetic below is already vectorized.
+  if (!is.numeric(mcse) || !length(mcse)) {
+    stop("`mcse` must be a numeric target Monte Carlo standard ",
+         "error, but it is ", class(mcse)[1], " of length ",
+         length(mcse), ". Supply one value, for example 0.005, or ",
+         "several to tabulate the replicate count at each.",
          call. = FALSE)
   }
-  if (is.na(mcse) || mcse <= 0) {
-    stop("`mcse` must be a positive number; received ", mcse,
-         ". It is the target Monte Carlo standard error on the ",
+  bad <- is.na(mcse) | mcse <= 0
+  if (any(bad)) {
+    stop("`mcse` must be positive and non-missing, but ", sum(bad),
+         " of ", length(mcse), " value(s) are not (",
+         paste(format(mcse[bad]), collapse = ", "),
+         "). It is the target Monte Carlo standard error on the ",
          "scale of the measure, so a smaller value asks for more ",
          "replicates.",
          call. = FALSE)

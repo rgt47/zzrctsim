@@ -88,38 +88,6 @@ sim_power <- function(n_per_arm, design_fn, dgm, beta,
              stringsAsFactors = FALSE)
 }
 
-#' Simulated power curve
-#'
-#' @param n_grid Integer vector of per-arm sample sizes.
-#' @param ... Passed to [sim_power()].
-#' @return An object of class `c("power_curve", "data.frame")`: the
-#'   [sim_power()] results row-bound over `n_grid`, so
-#'   `length(n_grid) * length(analyze)` rows with the same four
-#'   columns
-#'   \describe{
-#'     \item{n_per_arm}{the per-arm sample size for the row}
-#'     \item{method}{the fitter name}
-#'     \item{power}{simulated rejection proportion at that size}
-#'     \item{mcse}{its Monte Carlo standard error}
-#'   }
-#'   Every point on the curve is simulated under the same `seed`, so
-#'   the sizes share random numbers and the curve is smoother than
-#'   independent runs would give. That correlation is deliberate but it
-#'   means the points are not independent estimates.
-#' @examples
-#' design_fn <- function(n) {
-#'   a <- factor(rep(c("placebo", "active"), each = n),
-#'               levels = c("placebo", "active"))
-#'   runin_design(trial_schedule(treatment = 4, interval = 3), a,
-#'                reference = "placebo")
-#' }
-#' g <- dgm_conditional(G = diag(c(9, 0.04)), sigma2 = 4)
-#'
-#' power_curve(n_grid = c(30, 60), design_fn = design_fn, dgm = g,
-#'             beta = c(x_slope = 0.5, x_trt_active = -0.25),
-#'             estimand = estimand("change difference", -3),
-#'             analyze = fit_ancova, B = 20)
-
 # Arguments reaching `sim_power()` through `...` must match its
 # formals EXACTLY. R's ordinary argument matching is partial, so
 # `s = 99` silently binds to `seed` and `int = 20` to `intercept`:
@@ -152,6 +120,38 @@ sim_power <- function(n_per_arm, design_fn, dgm, beta,
   }
   invisible(TRUE)
 }
+
+#' Simulated power curve
+#'
+#' @param n_grid Integer vector of per-arm sample sizes.
+#' @param ... Passed to [sim_power()].
+#' @return An object of class `c("power_curve", "data.frame")`: the
+#'   [sim_power()] results row-bound over `n_grid`, so
+#'   `length(n_grid) * length(analyze)` rows with the same four
+#'   columns
+#'   \describe{
+#'     \item{n_per_arm}{the per-arm sample size for the row}
+#'     \item{method}{the fitter name}
+#'     \item{power}{simulated rejection proportion at that size}
+#'     \item{mcse}{its Monte Carlo standard error}
+#'   }
+#'   Every point on the curve is simulated under the same `seed`, so
+#'   the sizes share random numbers and the curve is smoother than
+#'   independent runs would give. That correlation is deliberate but it
+#'   means the points are not independent estimates.
+#' @examples
+#' design_fn <- function(n) {
+#'   a <- factor(rep(c("placebo", "active"), each = n),
+#'               levels = c("placebo", "active"))
+#'   runin_design(trial_schedule(treatment = 4, interval = 3), a,
+#'                reference = "placebo")
+#' }
+#' g <- dgm_conditional(G = diag(c(9, 0.04)), sigma2 = 4)
+#'
+#' power_curve(n_grid = c(30, 60), design_fn = design_fn, dgm = g,
+#'             beta = c(x_slope = 0.5, x_trt_active = -0.25),
+#'             estimand = estimand("change difference", -3),
+#'             analyze = fit_ancova, B = 20)
 
 #' @export
 power_curve <- function(n_grid, ...) {
