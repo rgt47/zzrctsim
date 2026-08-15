@@ -170,3 +170,29 @@ expect_true(all(!is.na(dat_acc$y)),
 expect_error(runin_design(data.frame(a = 1), arm_acc),
              pattern = "schedule",
              info = 'runin_design names the offending argument')
+
+# `arm` maps to subjects by SORTED id, not by row order.
+#
+# Keying the mapping to first appearance would make a schedule sorted
+# by calendar date -- the natural ordering for staggered accrual --
+# silently assign arms to the wrong subjects.
+arm_map <- function(x) {
+  u <- unique(runin_design(x, arm_acc, reference = "placebo")[,
+                                                    c("id", "arm")])
+  as.character(u$arm[order(u$id)])
+}
+ref_map <- arm_map(rs_acc)
+
+reord <- function(rows) {
+  z <- rs_acc[rows, ]
+  attributes(z)[c("J0", "J1", "interval", "t_last")] <-
+    attributes(rs_acc)[c("J0", "J1", "interval", "t_last")]
+  class(z) <- class(rs_acc)
+  z
+}
+expect_equal(arm_map(reord(order(-rs_acc$id, rs_acc$time))), ref_map,
+             info = 'reversed row order maps arms identically')
+expect_equal(arm_map(reord(order(rs_acc$calendar))), ref_map,
+             info = 'calendar-sorted rows map arms identically')
+expect_equal(ref_map, as.character(arm_acc),
+             info = 'arm i belongs to subject i, as in the balanced path')

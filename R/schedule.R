@@ -260,7 +260,13 @@ runin_design <- function(schedule,
     # Subjects already have their own grids, of differing length, so
     # the columns are taken row-wise and `arm` is broadcast per
     # subject rather than per row.
-    ids <- unique(schedule$id)
+    # Sorted, not first-appearance: `arm[i]` must belong to the i-th
+    # subject by id, matching the balanced branch where id is
+    # `rep(seq_len(n), each = p)`. Using `unique()` would key the
+    # mapping to row order, so a schedule sorted by calendar date --
+    # the natural ordering for staggered accrual -- would silently
+    # assign arms to the wrong subjects.
+    ids <- sort(unique(schedule$id))
     if (n != length(ids)) {
       stop("`arm` has length ", n, " but the realized schedule holds ",
            length(ids), " subject(s); supply one arm per subject.")
