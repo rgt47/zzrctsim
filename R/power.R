@@ -242,6 +242,29 @@ sample_size <- function(target = 0.80, n_grid, confirm_B = 2000L, ...) {
          paste(meths, collapse = ", "))
   }
 
+  # A grid point where too few replicates converged yields NA power.
+  # Those points carry no information about the curve, so they are
+  # dropped with a warning rather than propagated into the comparisons
+  # below, where `if (NA)` would abort with "missing value where
+  # TRUE/FALSE needed" and name nothing.
+  na_pow <- is.na(curve$power)
+  if (any(na_pow)) {
+    warning(sum(na_pow), " of ", nrow(curve), " grid point(s) gave no ",
+            "usable power (sizes ",
+            paste(curve$n_per_arm[na_pow], collapse = ", "),
+            "): fewer than two replicates converged there, usually ",
+            "because the sample size is too small to fit the model. ",
+            "They are excluded from the interpolation. Drop them from ",
+            "`n_grid`, or raise `B`.")
+    curve <- curve[!na_pow, , drop = FALSE]
+    if (nrow(curve) < 2L) {
+      stop("Fewer than 2 usable grid points remain after dropping ",
+           "those with no converged replicates, so the power curve ",
+           "cannot be interpolated. Raise the sizes in `n_grid`, or ",
+           "raise `B`.")
+    }
+  }
+
   if (max(curve$power) < target) {
     stop("Target power ", target, " not reached on the grid; ",
          "the largest size gave ", format(max(curve$power), digits = 3),

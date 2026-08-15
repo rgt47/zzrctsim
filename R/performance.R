@@ -73,8 +73,24 @@ compute_performance <- function(results, theta = NULL, alpha = 0.05) {
     data.frame(measure = measure, estimate = estimate, mcse = mcse,
                stringsAsFactors = FALSE)
   }
+  # Fewer than two converged replicates leaves every dispersion
+  # measure undefined, but the ROW SHAPE must not change: returning a
+  # short frame made `sim_power()`'s filter for "rejection" match
+  # nothing, which crashed `power_curve()` with "arguments imply
+  # differing number of rows: 1, 0" and -- worse -- silently dropped
+  # the degenerate method from a multi-method curve, so a comparison
+  # of two fitters could quietly report only one. All 11 measures are
+  # emitted, with NA where the quantity does not exist.
   if (B < 2L) {
-    return(add("n_converged", B, NA_real_))
+    undefined <- c("bias", "emp_se", "mod_se", "rel_error_mod_se",
+                   "mse", "coverage", "bias_elim_coverage",
+                   "rejection", "mean_ci_width")
+    return(rbind(
+      add("n_converged", B, NA_real_),
+      add("conv_rate", B / n_total, NA_real_),
+      add(undefined, rep(NA_real_, length(undefined)),
+          rep(NA_real_, length(undefined)))
+    ))
   }
 
   est <- z$estimate

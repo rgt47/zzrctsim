@@ -278,3 +278,66 @@ mono <- data.frame(n_per_arm = c(50, 100, 150, 200),
                    power = c(0.50, 0.70, 0.85, 0.95))
 expect_false(is.unsorted(mono$power[order(mono$n_per_arm)]),
              info = 'a clean curve is not flagged')
+
+# ---- degenerate grid points keep the row shape -----------------------
+#
+# `compute_performance()` used to return 1 row instead of 11 when fewer
+# than two replicates converged. `sim_power()` filters that frame for
+# the "rejection" row, so it got nothing, and the consequences were a
+# crash in `power_curve()` ("arguments imply differing number of rows:
+# 1, 0") and -- worse -- a multi-method curve that silently dropped the
+# degenerate method, so a comparison of two fitters could report one.
+
+deg <- run_simulation(3L,
+                      function() generate_outcomes(mk_design(20), gd,
+                                                   beta = b, intercept = 10),
+                      list(bad = function(z) null_fit()), es, seed = 1L)
+perf_deg <- compute_performance(deg)
+expect_equal(nrow(perf_deg), 11L,
+             info = 'a degenerate method still emits all 11 measures')
+expect_true(all(c("rejection", "bias", "coverage") %in%
+                  perf_deg$measure),
+            info = 'the measures a caller filters on are present')
+expect_true(is.na(perf_deg$estimate[perf_deg$measure == "rejection"]),
+            info = 'undefined measures are NA, not absent')
+expect_equal(perf_deg$estimate[perf_deg$measure == "n_converged"], 0,
+             info = 'n_converged still reports the truth')
+
+# Both methods appear, the degenerate one carrying NA rather than
+# disappearing from the curve.
+two <- sim_power(20L, mk_design, gd, b,
+                 analyze = list(good = anc[[1]], bad = function(z) null_fit()),
+                 estimand = es, B = 10L)
+expect_equal(nrow(two), 2L,
+             info = 'a degenerate method is not dropped from the curve')
+expect_true(is.na(two$power[two$method == "bad"]),
+            info = 'the degenerate method reports NA power')
+expect_false(is.na(two$power[two$method == "good"]),
+             info = 'the healthy method is unaffected')
+
+# `power_curve()` no longer crashes on a too-small grid point.
+pc_deg <- power_curve(n_grid = c(1L, 20L), design_fn = mk_design,
+                      dgm = gd, beta = b, analyze = anc,
+                      estimand = es, B = 10L)
+expect_equal(nrow(pc_deg), 2L,
+             info = 'a too-small grid point yields a row, not an error')
+expect_true(is.na(pc_deg$power[pc_deg$n_per_arm == 1L]),
+            info = 'the unusable point is NA')
+
+# `sample_size()` drops NA points with a warning instead of aborting
+# inside `if (NA)`.
+deg_args <- list(target = 0.5, n_grid = c(1L, 10L, 20L),
+                 confirm_B = 0L, design_fn = mk_design, dgm = gd,
+                 beta = b, analyze = anc, estimand = es, B = 15L)
+expect_warning(do.call(sample_size, deg_args),
+               info = 'unusable grid points are reported, not silently used')
+ss_deg <- suppressWarnings(do.call(sample_size, deg_args))
+expect_true(ss_deg$n_per_arm > 0L,
+            info = 'a size is still selected from the usable points')
+expect_error(
+  suppressWarnings(
+    sample_size(target = 0.5, n_grid = c(1L, 2L), confirm_B = 0L,
+                design_fn = mk_design, dgm = gd, beta = b,
+                analyze = anc, estimand = es, B = 15L)),
+  pattern = "usable grid points",
+  info = 'too few usable points is an explicit error')
