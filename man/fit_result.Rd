@@ -49,12 +49,19 @@ infinite}
 replicates are excluded by \code{\link[=compute_performance]{compute_performance()}}}
 \item{level}{the confidence level}
 }
-These seven names are the whole contract: \code{\link[=run_simulation]{run_simulation()}} reads
-\code{estimate}, \code{se}, \code{p_value}, \code{ci_lower}, \code{ci_upper} and
-\code{converged} from every fitter, and nothing else.
+These eight names are the whole contract. Of them,
+\code{\link[=run_simulation]{run_simulation()}} reads six -- \code{estimate}, \code{se}, \code{p_value},
+\code{ci_lower}, \code{ci_upper} and \code{converged} -- from every fitter, and
+nothing else; \code{df} and \code{level} are retained for the fitter's own
+reporting.
 }
 \description{
 Every analysis method must return this shape, so that competing
 methods are interchangeable downstream and performance measures need
 no knowledge of the fitter.
+}
+\seealso{
+\code{\link[=null_fit]{null_fit()}} for the non-convergence case, \code{\link[=fit_ancova]{fit_ancova()}}
+for a reference fitter satisfying this contract, and
+\code{\link[=run_simulation]{run_simulation()}}, which consumes it.
 }

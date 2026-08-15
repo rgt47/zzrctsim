@@ -10,8 +10,15 @@ null_fit(converged = FALSE)
 \item{converged}{Logical, normally \code{FALSE}.}
 }
 \value{
-A \code{fit_result} of \code{NA}s.
+A \code{\link[=fit_result]{fit_result()}} whose \code{estimate}, \code{se}, \code{p_value},
+\code{ci_lower} and \code{ci_upper} are \code{NA_real_}. The remaining three
+elements are not \code{NA}: \code{df} is \code{Inf}, \code{level} is \code{0.95}, and
+\code{converged} is whatever was passed (\code{FALSE} by default), which is
+the flag \code{\link[=compute_performance]{compute_performance()}} uses to exclude the replicate.
 }
 \description{
 A failed fit
+}
+\seealso{
+\code{\link[=fit_result]{fit_result()}} for the contract this fills in.
 }

@@ -15,9 +15,10 @@
 #' Generate outcomes for a trial
 #'
 #' @param design A data frame of one row per subject-visit, as returned
-#'   by [runin_design()] or by [realize_schedule()] passed through
-#'   [runin_design()]. Must contain `id` and `time`, plus any columns
-#'   named in `beta`.
+#'   by [runin_design()] -- either from a balanced [trial_schedule()],
+#'   or from a ragged [realize_schedule()] under staggered accrual,
+#'   which [runin_design()] also accepts. Must contain `id` and
+#'   `time`, plus any columns named in `beta`.
 #' @param dgm A `dgm` object supplying the within-subject covariance.
 #' @param beta Named numeric vector of fixed effects. Names must match
 #'   columns of `design`; an `"(Intercept)"` entry is added implicitly

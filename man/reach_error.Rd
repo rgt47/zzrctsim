@@ -4,13 +4,19 @@
 \alias{reach_error}
 \title{Error incurred by a restricted random-effects budget}
 \usage{
-reach_error(V, q = NULL)
+reach_error(V, q = NULL, tol = 1e-09)
 }
 \arguments{
 \item{V}{Target covariance.}
 
-\item{q}{Integer vector of random-effect budgets to evaluate.
-Defaults to \code{1:(p-1)}.}
+\item{q}{Integer vector of random-effect budgets to evaluate. Every
+element must lie in \code{1:(p-1)}: a budget of \code{p} or more reaches \code{V}
+exactly and has no approximation error to report. Defaults to
+\code{1:(p-1)}.}
+
+\item{tol}{Numeric. Tolerance by which a slightly negative eigenvalue
+is forgiven before \code{V} is rejected as not positive semi-definite,
+as in \code{\link[=certify]{certify()}}.}
 }
 \value{
 A data frame with columns \code{q}, \code{sigma2}, \code{max_abs_error},

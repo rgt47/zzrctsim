@@ -12,11 +12,14 @@ as_conditional(dgm, times, q = NULL)
 \item{times}{Grid on which to evaluate.}
 
 \item{q}{Integer. Random-effects budget. Defaults to the minimum
-required.}
+required. A \code{q} below \code{q_min} is an error; a \code{q} above it warns and
+is ignored, since the certified construction is already exact at
+\code{q_min} and further random effects would carry zero variance.}
 }
 \value{
 A \code{dgm_conditional} whose \code{z()} returns the certified
-loadings on \code{times}.
+loadings on \code{times}, and whose \code{q} is always \code{q_min} regardless of
+the budget supplied.
 }
 \description{
 Possible only when the target covariance is reachable from \code{q}

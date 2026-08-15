@@ -128,7 +128,12 @@ print.trial_schedule <- function(x, ...) {
 #' after the last on-treatment visit. The two conventions are not
 #' equivalent and give different estimands; see Details.
 #'
-#' @param schedule A `trial_schedule`.
+#' @param schedule Either a `trial_schedule` from [trial_schedule()],
+#'   giving every subject the same visit grid, or a
+#'   `realized_schedule` from [realize_schedule()], giving each
+#'   subject the grid their enrollment date and the common close-out
+#'   allow. The second is the staggered-accrual path, and produces a
+#'   ragged design with differing numbers of rows per subject.
 #' @param arm Arm allocation, one entry per subject, of length `n`.
 #'   Any vector `factor()` accepts: a factor is used as given, and
 #'   anything else (integer, character, logical) is coerced with
@@ -209,7 +214,14 @@ runin_design <- function(schedule,
                          hinge = TRUE,
                          reference = NULL,
                          common_close = c("revert", "retain")) {
-  stopifnot(inherits(schedule, "trial_schedule"))
+  ragged <- inherits(schedule, "realized_schedule")
+  if (!ragged && !inherits(schedule, "trial_schedule")) {
+    stop("`schedule` must be a `trial_schedule` from ",
+         "`trial_schedule()`, or a `realized_schedule` from ",
+         "`realize_schedule()` for a staggered-accrual design; ",
+         "got an object of class ",
+         paste(class(schedule), collapse = "/"), ".")
+  }
   common_close <- match.arg(common_close)
 
   arm_f <- if (is.factor(arm)) arm else factor(arm)
@@ -230,15 +242,37 @@ runin_design <- function(schedule,
   }
 
   n <- length(arm_f)
-  p <- nrow(schedule)
   J1 <- attr(schedule, "J1")
-  t_last <- schedule$time[schedule$index == J1]
+  J0 <- attr(schedule, "J0")
 
-  idx <- rep(schedule$index, times = n)
-  t_j <- rep(schedule$time, times = n)
-  h <- rep(schedule$h, times = n)
-  ontrt <- rep(schedule$on_treatment, times = n)
-  a <- rep(arm_f, each = p)
+  if (ragged) {
+    # Subjects already have their own grids, of differing length, so
+    # the columns are taken row-wise and `arm` is broadcast per
+    # subject rather than per row.
+    ids <- unique(schedule$id)
+    if (n != length(ids)) {
+      stop("`arm` has length ", n, " but the realized schedule holds ",
+           length(ids), " subject(s); supply one arm per subject.")
+    }
+    t_last <- attr(schedule, "t_last")
+    subj_id <- schedule$id
+    idx <- schedule$index
+    t_j <- schedule$time
+    h <- schedule$h
+    ontrt <- schedule$on_treatment
+    phase_v <- schedule$phase
+    a <- arm_f[match(subj_id, ids)]
+  } else {
+    p <- nrow(schedule)
+    t_last <- schedule$time[schedule$index == J1]
+    subj_id <- rep(seq_len(n), each = p)
+    idx <- rep(schedule$index, times = n)
+    t_j <- rep(schedule$time, times = n)
+    h <- rep(schedule$h, times = n)
+    ontrt <- rep(schedule$on_treatment, times = n)
+    phase_v <- rep(schedule$phase, times = n)
+    a <- rep(arm_f, each = p)
+  }
 
   # Treatment-phase time, respecting the common-close convention.
   t_trt <- if (common_close == "revert") {
@@ -248,11 +282,11 @@ runin_design <- function(schedule,
   }
 
   out <- data.frame(
-    id = rep(seq_len(n), each = p),
+    id = subj_id,
     arm = a,
     index = idx,
     time = t_j,
-    phase = rep(schedule$phase, times = n),
+    phase = phase_v,
     x_slope = t_j
   )
 
@@ -265,7 +299,7 @@ runin_design <- function(schedule,
   # columns are aliased: there is no pre-randomization slope for the
   # hinge to depart from. Emitting the column anyway would hand the
   # user a rank-deficient design whose fit silently drops a term.
-  if (isTRUE(hinge[[reference]]) && attr(schedule, "J0") > 0L) {
+  if (isTRUE(hinge[[reference]]) && J0 > 0L) {
     out$x_hinge <- h * t_j
   }
 

@@ -206,5 +206,16 @@ realize_schedule <- function(schedule, enroll, close,
                       levels = c("run_in", "randomization",
                                  "treatment", "common_close"))
   rownames(out) <- NULL
+
+  # The design-matrix builder needs the phase boundaries, which are a
+  # property of the schedule rather than of any subject's realized
+  # grid. Carrying them here is what lets `runin_design()` accept this
+  # ragged frame directly, so that staggered accrual reaches the
+  # generation stage instead of dead-ending at a data frame.
+  class(out) <- c("realized_schedule", "data.frame")
+  attr(out, "J0") <- attr(schedule, "J0")
+  attr(out, "J1") <- J1
+  attr(out, "interval") <- interval
+  attr(out, "t_last") <- schedule$time[schedule$index == J1]
   out
 }

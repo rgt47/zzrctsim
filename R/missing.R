@@ -138,17 +138,25 @@ dropout_mask <- function(dat,
     v[levs]
   }
 
+  # The psi0-free part of every hazard is invariant across calibration
+  # iterations, and the per-subject row lookup does not depend on psi0
+  # either, so both are computed once per group here rather than inside
+  # the uniroot objective.
+  grp_terms <- lapply(levs, function(g) {
+    sub <- dat[grp == g, , drop = FALSE]
+    .haz_terms(sub, .subject_rows(sub), psi1, psi2, psi_cov, center,
+               from)
+  })
+  names(grp_terms) <- levs
+
   # Calibrate or accept psi0, group by group.
   psi0_g <- if (!is.null(psi0)) {
     .expand(psi0, "psi0")
   } else {
     tg <- .expand(target, "target")
     vapply(levs, function(g) {
-      sub <- dat[grp == g, , drop = FALSE]
-      f <- function(p) {
-        .expected_missing(sub, p, psi1, psi2, psi_cov, center, from,
-                          monotone) - tg[[g]]
-      }
+      tms <- grp_terms[[g]]
+      f <- function(p) .expected_missing(tms, p) - tg[[g]]
       if (f(-50) > 0 || f(50) < 0) {
         stop("Cannot calibrate psi0 for group '", g,
              "' to a target of ", tg[[g]], ".")
@@ -158,18 +166,17 @@ dropout_mask <- function(dat,
   }
 
   expected <- vapply(levs, function(g) {
-    .expected_missing(dat[grp == g, , drop = FALSE], psi0_g[[g]],
-                      psi1, psi2, psi_cov, center, from, monotone)
+    .expected_missing(grp_terms[[g]], psi0_g[[g]])
   }, numeric(1))
 
   # Draw the pattern.
+  rows <- .subject_rows(dat)
+  terms <- .haz_terms(dat, rows, psi1, psi2, psi_cov, center, from)
   missing <- logical(nrow(dat))
-  for (i in unique(dat$id)) {
-    k <- which(dat$id == i)
-    k <- k[order(dat$time[k])]
+  for (s in seq_along(rows)) {
+    k <- rows[[s]]
     g <- as.character(grp[k[1]])
-    p <- .haz_rows(dat, k, psi0_g[[g]], psi1, psi2, psi_cov, center,
-                   from)
+    p <- .haz_eval(terms[[s]], psi0_g[[g]])
     elig <- which(dat$time[k] > from)
     if (!length(elig)) next
     u <- stats::runif(length(elig))
@@ -195,24 +202,59 @@ dropout_mask <- function(dat,
   out
 }
 
-# Hazards for one subject's eligible visits.
-.haz_rows <- function(dat, k, psi0, psi1, psi2, psi_cov, center, from) {
-  yv <- dat$y[k]
-  tv <- dat$time[k]
-  elig <- which(tv > from)
-  if (!length(elig)) return(numeric(0))
-  # At a visit with no predecessor there is no previously observed
-  # response to condition on, so the history term contributes nothing:
-  # `prev` is set to `center`, making `psi1 * (prev - center)` zero.
-  # Substituting the *current* response here instead would make the
-  # hazard depend on an unobserved value, which is MNAR, while the
-  # mechanism would still be reported as MAR.
-  prev <- ifelse(elig > 1L, yv[pmax(elig - 1L, 1L)], center)
-  eta <- psi0 + psi1 * (prev - center) + psi2 * (yv[elig] - center)
-  if (!is.null(psi_cov)) {
-    for (nm in names(psi_cov)) {
-      eta <- eta + psi_cov[[nm]] * as.numeric(dat[[nm]][k][elig])
-    }
+# Row indices of `dat` for each subject, ordered by time within
+# subject, subjects in order of first appearance. Computed once and
+# reused: the earlier `which(dat$id == i)` inside a loop over subjects
+# was O(n_subjects * n_rows), which dominated calibration because the
+# uniroot objective re-derived it on every iteration.
+.subject_rows <- function(dat) {
+  idc <- as.character(dat$id)
+  ks <- split(seq_len(nrow(dat)), factor(idc, levels = unique(idc)))
+  lapply(ks, function(k) k[order(dat$time[k])])
+}
+
+# The psi0-free terms of the dropout hazard, per subject.
+#
+# Only `psi0` varies during calibration, so everything else in the
+# linear predictor is computed once here. The terms are kept as
+# separate columns rather than pre-summed so that `.haz_eval()` can add
+# them onto `psi0` in the same left-to-right order as the original
+# single expression; pre-summing would reassociate the floating-point
+# arithmetic and perturb the calibrated root in the last bits.
+.haz_terms <- function(dat, rows, psi1, psi2, psi_cov, center, from) {
+  cov_cols <- if (is.null(psi_cov)) {
+    NULL
+  } else {
+    lapply(names(psi_cov), function(nm) {
+      psi_cov[[nm]] * as.numeric(dat[[nm]])
+    })
+  }
+  lapply(rows, function(k) {
+    tv <- dat$time[k]
+    elig <- which(tv > from)
+    if (!length(elig)) return(NULL)
+    yv <- dat$y[k]
+    # At a visit with no predecessor there is no previously observed
+    # response to condition on, so the history term contributes
+    # nothing: `prev` is set to `center`, making
+    # `psi1 * (prev - center)` zero. Substituting the *current*
+    # response here instead would make the hazard depend on an
+    # unobserved value, which is MNAR, while the mechanism would still
+    # be reported as MAR.
+    prev <- ifelse(elig > 1L, yv[pmax(elig - 1L, 1L)], center)
+    A <- cbind(psi1 * (prev - center), psi2 * (yv[elig] - center))
+    for (cc in cov_cols) A <- cbind(A, cc[k][elig])
+    A
+  })
+}
+
+# Hazards for one subject's eligible visits, given psi0.
+.haz_eval <- function(A, psi0) {
+  if (is.null(A)) return(numeric(0))
+  eta <- psi0 + A[, 1L]
+  eta <- eta + A[, 2L]
+  if (ncol(A) > 2L) {
+    for (j in seq.int(3L, ncol(A))) eta <- eta + A[, j]
   }
   stats::plogis(eta)
 }
@@ -220,13 +262,9 @@ dropout_mask <- function(dat,
 # Expected proportion of subjects with any missing observation.
 # Exact given complete data: monotone and intermittent coincide here,
 # since both are "at least one hazard fires".
-.expected_missing <- function(dat, psi0, psi1, psi2, psi_cov, center,
-                              from, monotone) {
-  ids <- unique(dat$id)
-  mean(vapply(ids, function(i) {
-    k <- which(dat$id == i)
-    k <- k[order(dat$time[k])]
-    p <- .haz_rows(dat, k, psi0, psi1, psi2, psi_cov, center, from)
+.expected_missing <- function(terms, psi0) {
+  mean(vapply(terms, function(A) {
+    p <- .haz_eval(A, psi0)
     if (!length(p)) 0 else 1 - prod(1 - p)
   }, numeric(1)))
 }
@@ -280,11 +318,31 @@ mask_from_data <- function(observed, response = "y") {
 #'
 #' @param dat Complete data.
 #' @param mask A `missing_mask`, or a logical vector of `nrow(dat)`.
-#' @param response Character. Column to set to `NA`.
+#' @param response Character. Column to set to `NA`. Must name an
+#'   existing column of `dat`.
 #' @return `dat` with masked entries set to `NA` and a `missing`
 #'   logical column added.
 #' @export
 apply_mask <- function(dat, mask, response = "y") {
+  stopifnot(is.data.frame(dat))
+  # `dat[[response]][m] <- NA` would *create* the column when it does
+  # not exist, so a misspelled `response` would leave the real outcome
+  # untouched and add an all-NA column beside it. That surfaces much
+  # later as a model that fails to converge, not as an error here.
+  if (!is.character(response) || length(response) != 1L ||
+      is.na(response)) {
+    stop("`response` must be a single column name; received ",
+         "a ", class(response)[1], " of length ", length(response),
+         ".", call. = FALSE)
+  }
+  if (!response %in% names(dat)) {
+    stop("`response` must name a column of `dat`; received '",
+         response, "', which is not present.\n",
+         "  Columns available: ",
+         paste(names(dat), collapse = ", "), ".\n",
+         "  Supply the name of the outcome column to be set to NA.",
+         call. = FALSE)
+  }
   if (inherits(mask, "missing_mask")) {
     key_d <- paste(dat$id, dat$time)
     key_m <- paste(mask$id, mask$time)
@@ -382,9 +440,7 @@ reference_based <- function(dat, mask,
   }
   is_missing <- mask$missing[idx]
 
-  for (i in unique(dat$id)) {
-    k <- which(dat$id == i)
-    k <- k[order(dat$time[k])]
+  for (k in .subject_rows(dat)) {
     mi <- is_missing[k]
     if (!any(mi)) next
     d <- which(mi)[1]

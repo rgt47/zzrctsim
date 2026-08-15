@@ -67,9 +67,14 @@ print.estimand <- function(x, ...) {
 #'       replicates are excluded by [compute_performance()]}
 #'     \item{level}{the confidence level}
 #'   }
-#'   These seven names are the whole contract: [run_simulation()] reads
-#'   `estimate`, `se`, `p_value`, `ci_lower`, `ci_upper` and
-#'   `converged` from every fitter, and nothing else.
+#'   These eight names are the whole contract. Of them,
+#'   [run_simulation()] reads six -- `estimate`, `se`, `p_value`,
+#'   `ci_lower`, `ci_upper` and `converged` -- from every fitter, and
+#'   nothing else; `df` and `level` are retained for the fitter's own
+#'   reporting.
+#' @seealso [null_fit()] for the non-convergence case, [fit_ancova()]
+#'   for a reference fitter satisfying this contract, and
+#'   [run_simulation()], which consumes it.
 #' @export
 fit_result <- function(estimate = NA_real_, se = NA_real_,
                        p_value = NA_real_,
@@ -93,12 +98,38 @@ fit_result <- function(estimate = NA_real_, se = NA_real_,
 #' A failed fit
 #'
 #' @param converged Logical, normally `FALSE`.
-#' @return A `fit_result` of `NA`s.
+#' @return A [fit_result()] whose `estimate`, `se`, `p_value`,
+#'   `ci_lower` and `ci_upper` are `NA_real_`. The remaining three
+#'   elements are not `NA`: `df` is `Inf`, `level` is `0.95`, and
+#'   `converged` is whatever was passed (`FALSE` by default), which is
+#'   the flag [compute_performance()] uses to exclude the replicate.
+#' @seealso [fit_result()] for the contract this fills in.
 #' @export
 null_fit <- function(converged = FALSE) {
   fit_result(NA_real_, NA_real_, NA_real_,
              ci_lower = NA_real_, ci_upper = NA_real_,
              converged = converged)
+}
+
+#' @export
+print.fit_result <- function(x, ...) {
+  cat("<fit_result>")
+  if (!isTRUE(x$converged)) cat("  [did not converge]")
+  cat("\n")
+  if (is.na(x$estimate)) {
+    cat("  estimate: NA\n")
+  } else {
+    cat(sprintf("  estimate: %s  (SE %s)\n",
+                format(x$estimate, digits = getOption("digits")),
+                format(x$se, digits = 3)))
+    cat(sprintf("  %g%% CI:   [%s, %s]\n", 100 * x$level,
+                format(x$ci_lower, digits = 4),
+                format(x$ci_upper, digits = 4)))
+    cat(sprintf("  p-value:  %s   (df %s)\n",
+                format.pval(x$p_value, digits = 3),
+                format(x$df, digits = 4)))
+  }
+  invisible(x)
 }
 
 #' ANCOVA of change from baseline at a nominated visit
@@ -263,9 +294,26 @@ run_simulation <- function(B, generate, analyze, estimand,
   log <- new.env(parent = emptyenv())
   log$errors <- character(0)
 
+  # Warnings are recorded and muffled rather than allowed to reach the
+  # console. A fitter that warns once per replicate would otherwise
+  # emit B warnings from a single call -- 1000 of them is not a
+  # diagnostic, it is noise -- and none of them would be retained with
+  # the replicate that produced it. Muffling keeps them in `errors`,
+  # where the print method surfaces the count.
+  trap <- function(expr, b, stage) {
+    withCallingHandlers(
+      tryCatch(expr, error = function(e) e),
+      warning = function(w) {
+        log$errors <- c(log$errors,
+                        paste0("rep ", b, " ", stage, " (warning): ",
+                               conditionMessage(w)))
+        invokeRestart("muffleWarning")
+      })
+  }
+
   for (b in seq_len(B)) {
     res <- with_rng_state(streams[[b]], {
-      dat <- tryCatch(generate(), error = function(e) e)
+      dat <- trap(generate(), b, "generate")
       if (inherits(dat, "error")) {
         log$errors <- c(log$errors,
                         paste0("rep ", b, " generate: ",
@@ -273,7 +321,7 @@ run_simulation <- function(B, generate, analyze, estimand,
         lapply(analyze, function(f) null_fit())
       } else {
         lapply(analyze, function(f) {
-          out <- tryCatch(f(dat), error = function(e) e)
+          out <- trap(f(dat), b, "analyze")
           if (inherits(out, "error")) {
             log$errors <- c(log$errors,
                             paste0("rep ", b, " analyze: ",
