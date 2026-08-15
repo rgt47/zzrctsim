@@ -107,7 +107,24 @@ dropout_mask <- function(dat,
                          monotone = TRUE,
                          center = NULL,
                          from = 0) {
-  stopifnot(is.data.frame(dat), all(c("id", "time", "y") %in% names(dat)))
+  if (!is.data.frame(dat)) {
+    stop("`dat` must be a data frame of complete data, but it has ",
+         "class ", paste(class(dat), collapse = "/"),
+         ". Pass the output of `generate_outcomes()`.",
+         call. = FALSE)
+  }
+  need <- c("id", "time", "y")
+  miss_col <- setdiff(need, names(dat))
+  if (length(miss_col)) {
+    stop("`dat` is missing the column(s) ",
+         paste(miss_col, collapse = ", "),
+         ", which the dropout hazard requires.\n",
+         "  Columns present: ",
+         paste(names(dat), collapse = ", "), ".\n",
+         "  Pass the output of `generate_outcomes()`, or rename the ",
+         "columns to `id`, `time`, and `y`.",
+         call. = FALSE)
+  }
   .check_family_for_hazard(dat, psi1, psi2, center)
   if (is.null(center)) center <- mean(dat$y, na.rm = TRUE)
 
@@ -296,7 +313,30 @@ print.missing_mask <- function(x, ...) {
 #' @return A `missing_mask`.
 #' @export
 mask_from_data <- function(observed, response = "y") {
-  stopifnot(all(c("id", "time", response) %in% names(observed)))
+  if (!is.data.frame(observed)) {
+    stop("`observed` must be a data frame, but it has class ",
+         paste(class(observed), collapse = "/"),
+         ". Supply the completed trial data whose `NA` pattern ",
+         "defines the mask.",
+         call. = FALSE)
+  }
+  if (!is.character(response) || length(response) != 1L ||
+      is.na(response)) {
+    stop("`response` must be a single column name; received ",
+         "a ", class(response)[1], " of length ", length(response),
+         ".", call. = FALSE)
+  }
+  miss_col <- setdiff(c("id", "time", response), names(observed))
+  if (length(miss_col)) {
+    stop("`observed` is missing the column(s) ",
+         paste(miss_col, collapse = ", "), ".\n",
+         "  Columns present: ",
+         paste(names(observed), collapse = ", "), ".\n",
+         "  `id` and `time` must line up with the data the mask ",
+         "will be applied to; set `response` to the name of the ",
+         "response column.",
+         call. = FALSE)
+  }
   out <- data.frame(id = observed$id, time = observed$time,
                     missing = is.na(observed[[response]]))
   mono <- all(vapply(split(out, out$id), function(z) {
@@ -324,7 +364,12 @@ mask_from_data <- function(observed, response = "y") {
 #'   logical column added.
 #' @export
 apply_mask <- function(dat, mask, response = "y") {
-  stopifnot(is.data.frame(dat))
+  if (!is.data.frame(dat)) {
+    stop("`dat` must be a data frame, but it has class ",
+         paste(class(dat), collapse = "/"),
+         ". Pass the complete data the mask is to be applied to.",
+         call. = FALSE)
+  }
   # `dat[[response]][m] <- NA` would *create* the column when it does
   # not exist, so a misspelled `response` would leave the real outcome
   # untouched and add an all-NA column beside it. That surfaces much
@@ -353,7 +398,22 @@ apply_mask <- function(dat, mask, response = "y") {
     }
     m <- mask$missing[idx]
   } else {
-    stopifnot(is.logical(mask), length(mask) == nrow(dat))
+    if (!is.logical(mask)) {
+      stop("`mask` must be a `missing_mask` or a logical vector, ",
+           "but it is a ", class(mask)[1], " of length ",
+           length(mask), ".\n",
+           "  Build one with `dropout_mask()` or ",
+           "`mask_from_data()`, or supply `TRUE`/`FALSE` per row ",
+           "of `dat`.",
+           call. = FALSE)
+    }
+    if (length(mask) != nrow(dat)) {
+      stop("`mask` must have one entry per row of `dat`; received ",
+           length(mask), " entries for ", nrow(dat), " rows.\n",
+           "  A logical mask is matched positionally, so it cannot ",
+           "be recycled.",
+           call. = FALSE)
+    }
     m <- mask
   }
   dat[[response]][m] <- NA_real_

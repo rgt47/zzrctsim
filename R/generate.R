@@ -50,7 +50,20 @@
 #' head(out)
 #' @export
 generate_outcomes <- function(design, dgm, beta, intercept = 0) {
-  stopifnot(is.data.frame(design), inherits(dgm, "dgm"))
+  if (!is.data.frame(design)) {
+    stop("`design` must be a data frame, but it has class ",
+         paste(class(design), collapse = "/"),
+         ". Build it with `runin_design()`, or supply any data ",
+         "frame with `id`, `time`, and the columns named in `beta`.",
+         call. = FALSE)
+  }
+  if (!inherits(dgm, "dgm")) {
+    stop("`dgm` must be a `dgm` object, but it has class ",
+         paste(class(dgm), collapse = "/"),
+         ". Construct one with `dgm_conditional()`, ",
+         "`dgm_marginal()`, or `dgm_mixture()`.",
+         call. = FALSE)
+  }
   if (is.null(names(beta)) || any(names(beta) == "")) {
     stop("`beta` must be fully named.")
   }

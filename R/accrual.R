@@ -35,7 +35,29 @@
 accrue <- function(n, period,
                    pattern = c("uniform", "linear", "poisson")) {
   pattern <- match.arg(pattern)
-  stopifnot(n >= 1, period >= 0)
+  if (!is.numeric(n) || length(n) != 1L || is.na(n) || n < 1) {
+    stop("`n` must be a single number of subjects of at least 1, ",
+         "but it is ", paste(class(n), collapse = "/"),
+         " of length ", length(n),
+         if (is.numeric(n) && length(n) == 1L) {
+           paste0(" with value ", format(n))
+         } else "",
+         ". Pass the number of subjects to enroll, e.g. n = 200.",
+         call. = FALSE)
+  }
+  if (!is.numeric(period) || length(period) != 1L ||
+      is.na(period) || period < 0) {
+    stop("`period` must be a single non-negative accrual window ",
+         "length, but it is ", paste(class(period), collapse = "/"),
+         " of length ", length(period),
+         if (is.numeric(period) && length(period) == 1L) {
+           paste0(" with value ", format(period))
+         } else "",
+         ". Give the window in the study time unit, e.g. ",
+         "period = 12 for twelve months; use 0 for instantaneous ",
+         "enrollment.",
+         call. = FALSE)
+  }
   e <- switch(
     pattern,
     uniform = stats::runif(n, 0, period),
@@ -76,7 +98,13 @@ accrue <- function(n, period,
 close_out <- function(enroll, schedule, rule = c("lslv", "fixed"),
                       at = NULL) {
   rule <- match.arg(rule)
-  stopifnot(inherits(schedule, "trial_schedule"))
+  if (!inherits(schedule, "trial_schedule")) {
+    stop("`schedule` must be a `trial_schedule` from ",
+         "`trial_schedule()`; got an object of class ",
+         paste(class(schedule), collapse = "/"),
+         ". The close-out date is read from its visit times.",
+         call. = FALSE)
+  }
   if (rule == "fixed") {
     if (is.null(at)) stop("`at` is required when rule = 'fixed'.")
     return(as.numeric(at))

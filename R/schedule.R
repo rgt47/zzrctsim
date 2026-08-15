@@ -51,8 +51,47 @@ trial_schedule <- function(run_in = 0L,
                            times = NULL,
                            treatment_end = NULL) {
   if (is.null(times)) {
-    stopifnot(run_in >= 0, treatment >= 1, common_close >= 0,
-              interval > 0)
+    # Split rather than checked jointly: the four have different
+    # admissible ranges and different fixes, and a joint failure that
+    # named none of them left the caller to guess which one was wrong.
+    .bad_scalar <- function(x) {
+      !is.numeric(x) || length(x) != 1L || is.na(x)
+    }
+    .saw <- function(x) {
+      if (.bad_scalar(x)) {
+        paste0("it is ", paste(class(x), collapse = "/"),
+               " of length ", length(x))
+      } else {
+        paste0("it is ", format(x))
+      }
+    }
+    if (.bad_scalar(run_in) || run_in < 0) {
+      stop("`run_in` must be a single count of pre-randomization ",
+           "visits of 0 or more, but ", .saw(run_in),
+           ". Use 0 for a trial with no run-in phase.",
+           call. = FALSE)
+    }
+    if (.bad_scalar(treatment) || treatment < 1) {
+      stop("`treatment` must be a single count of post-randomization ",
+           "on-treatment visits of 1 or more, but ", .saw(treatment),
+           ". A trial needs at least one visit after randomization ",
+           "to estimate a treatment effect.",
+           call. = FALSE)
+    }
+    if (.bad_scalar(common_close) || common_close < 0) {
+      stop("`common_close` must be a single count of post-treatment ",
+           "visits of 0 or more, but ", .saw(common_close),
+           ". Use 0 for a trial with no common close phase.",
+           call. = FALSE)
+    }
+    if (.bad_scalar(interval) || interval <= 0) {
+      stop("`interval` must be a single positive visit spacing, but ",
+           .saw(interval),
+           ". Give the spacing in the study time unit, e.g. ",
+           "interval = 3 for visits every three months, or supply ",
+           "`times` for an unequally spaced design.",
+           call. = FALSE)
+    }
     # Visit counts are counts. A fractional value would otherwise be
     # truncated silently by `as.integer()` below, so that
     # `treatment = 2.5` quietly became 2.
@@ -70,7 +109,27 @@ trial_schedule <- function(run_in = 0L,
     J1 <- as.integer(treatment)
     J2 <- as.integer(common_close)
   } else {
-    stopifnot(is.numeric(times), !is.unsorted(times))
+    if (!is.numeric(times) || length(times) < 1L || anyNA(times)) {
+      stop("`times` must be a non-empty numeric vector of visit ",
+           "times with no missing values, but it is ",
+           paste(class(times), collapse = "/"), " of length ",
+           length(times),
+           if (anyNA(times)) " containing NA" else "",
+           ". Give the times on the study time scale, negative during ",
+           "run-in and 0 at randomization.",
+           call. = FALSE)
+    }
+    if (is.unsorted(times)) {
+      out_of_order <- which(diff(times) < 0)[1L]
+      stop("`times` must be in increasing order, but element ",
+           out_of_order + 1L, " (", format(times[out_of_order + 1L]),
+           ") is less than element ", out_of_order, " (",
+           format(times[out_of_order]),
+           "). Visit indices are taken from position, so sort the ",
+           "times first: times = sort(c(",
+           paste(format(times), collapse = ", "), ")).",
+           call. = FALSE)
+    }
     if (!any(abs(times) < .Machine$double.eps^0.5)) {
       stop("`times` must include 0, the randomization visit.")
     }

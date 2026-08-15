@@ -22,8 +22,20 @@
 #'   }
 #' @export
 estimand <- function(name, value, description = NULL) {
-  stopifnot(is.character(name), length(name) == 1L,
-            is.numeric(value), length(value) == 1L)
+  if (!is.character(name) || length(name) != 1L) {
+    stop("`name` must be a single character label, but it is ",
+         paste(class(name), collapse = "/"), " of length ",
+         length(name), ". Pass the label as a string, e.g. ",
+         "estimand(\"difference in change at month 12\", -3).",
+         call. = FALSE)
+  }
+  if (!is.numeric(value) || length(value) != 1L) {
+    stop("`value` must be a single number, the true value of the ",
+         "estimand, but it is ", paste(class(value), collapse = "/"),
+         " of length ", length(value), ". Supply one number; an ",
+         "estimand names one population quantity.",
+         call. = FALSE)
+  }
   structure(list(name = name, value = value,
                  description = description),
             class = "estimand")
@@ -262,7 +274,24 @@ fit_ancova <- function(dat, visit_time = NULL, reference = NULL,
 #' @export
 run_simulation <- function(B, generate, analyze, estimand,
                            seed = 20260810L) {
-  stopifnot(B >= 1, is.function(generate))
+  if (!is.numeric(B) || length(B) != 1L || is.na(B) || B < 1) {
+    stop("`B` must be a single number of replicates of at least 1, ",
+         "but it is ", paste(class(B), collapse = "/"),
+         " of length ", length(B),
+         if (is.numeric(B) && length(B) == 1L) {
+           paste0(" with value ", format(B))
+         } else "",
+         ". Pass the replicate count, e.g. B = 1000.",
+         call. = FALSE)
+  }
+  if (!is.function(generate)) {
+    stop("`generate` must be a function of no arguments returning one ",
+         "simulated data set, but it is ",
+         paste(class(generate), collapse = "/"),
+         ". Wrap the data-generating call, e.g. ",
+         "generate = function() generate_outcomes(design, dgm, beta).",
+         call. = FALSE)
+  }
   if (is.function(analyze)) analyze <- list(method = analyze)
   if (!is.list(analyze) || !length(analyze)) {
     stop("`analyze` must be a function or a non-empty list of ",
@@ -284,7 +313,14 @@ run_simulation <- function(B, generate, analyze, estimand,
                                       logical(1))],
                collapse = ", "), " are not.")
   }
-  stopifnot(inherits(estimand, "estimand"))
+  if (!inherits(estimand, "estimand")) {
+    stop("`estimand` must be an `estimand` object from `estimand()`; ",
+         "got an object of class ",
+         paste(class(estimand), collapse = "/"),
+         ". Build one with estimand(name, value), e.g. ",
+         "estimand(\"difference in change at month 12\", -3).",
+         call. = FALSE)
+  }
 
   streams <- sim_streams(B, seed)
   rows <- vector("list", B)

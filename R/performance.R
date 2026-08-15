@@ -156,7 +156,20 @@ compute_performance <- function(results, theta = NULL, alpha = 0.05) {
 nsim_for_mcse <- function(measure = c("proportion", "bias"),
                           mcse, p = 0.5, sd = 1) {
   measure <- match.arg(measure)
-  stopifnot(mcse > 0)
+  if (!is.numeric(mcse) || length(mcse) != 1L) {
+    stop("`mcse` must be a single number, but it is a ",
+         class(mcse)[1], " of length ", length(mcse),
+         ". Supply the target Monte Carlo standard error, ",
+         "for example 0.005.",
+         call. = FALSE)
+  }
+  if (is.na(mcse) || mcse <= 0) {
+    stop("`mcse` must be a positive number; received ", mcse,
+         ". It is the target Monte Carlo standard error on the ",
+         "scale of the measure, so a smaller value asks for more ",
+         "replicates.",
+         call. = FALSE)
+  }
   n <- switch(measure,
               proportion = p * (1 - p) / mcse^2,
               bias = (sd / mcse)^2)

@@ -34,7 +34,16 @@
 #' identical(a, with_rng_state(streams[[3]], rnorm(3)))
 #' @export
 sim_streams <- function(n, seed) {
-  stopifnot(n >= 1)
+  if (!is.numeric(n) || length(n) != 1L || is.na(n) || n < 1) {
+    stop("`n` must be a single number of substreams of at least 1, ",
+         "but it is ", paste(class(n), collapse = "/"),
+         " of length ", length(n),
+         if (is.numeric(n) && length(n) == 1L) {
+           paste0(" with value ", format(n))
+         } else "",
+         ". Pass the number of replicates to be run, e.g. n = 1000.",
+         call. = FALSE)
+  }
   old_kind <- RNGkind()
   old_seed <- if (exists(".Random.seed", envir = globalenv())) {
     get(".Random.seed", envir = globalenv())

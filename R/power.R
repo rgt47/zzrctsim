@@ -119,8 +119,43 @@ sim_power <- function(n_per_arm, design_fn, dgm, beta,
 #'             beta = c(x_slope = 0.5, x_trt_active = -0.25),
 #'             estimand = estimand("change difference", -3),
 #'             analyze = fit_ancova, B = 20)
+
+# Arguments reaching `sim_power()` through `...` must match its
+# formals EXACTLY. R's ordinary argument matching is partial, so
+# `s = 99` silently binds to `seed` and `int = 20` to `intercept`:
+# the call succeeds, and a reproducibility argument in particular is
+# then set by something the user never wrote. Abbreviation is a
+# convenience at the console and a hazard in a study script, so it is
+# refused here with the intended name suggested.
+.check_sim_dots <- function(nms, caller) {
+  valid <- setdiff(names(formals(sim_power)), "n_per_arm")
+  if (!length(nms)) return(invisible(TRUE))
+  if (any(!nzchar(nms))) {
+    stop("`", caller, "()` passes its `...` to `sim_power()` by name; ",
+         sum(!nzchar(nms)), " argument(s) were given positionally. ",
+         "Name every argument: ",
+         paste(valid, collapse = ", "), ".")
+  }
+  bad <- setdiff(nms, valid)
+  if (length(bad)) {
+    hint <- vapply(bad, function(b) {
+      near <- valid[startsWith(valid, b)]
+      if (length(near) == 1L) paste0("`", b, "` (did you mean `",
+                                     near, "`?)")
+      else paste0("`", b, "`")
+    }, character(1))
+    stop("Unknown argument(s) passed through `...` to `sim_power()`: ",
+         paste(hint, collapse = ", "),
+         ". Abbreviations are not accepted, because partial matching ",
+         "would silently bind them to a different argument. Valid ",
+         "names: ", paste(valid, collapse = ", "), ".")
+  }
+  invisible(TRUE)
+}
+
 #' @export
 power_curve <- function(n_grid, ...) {
+  .check_sim_dots(names(list(...)), "power_curve")
   out <- do.call(rbind, lapply(n_grid, function(n) {
     sim_power(n_per_arm = n, ...)
   }))
@@ -176,8 +211,20 @@ print.power_curve <- function(x, ...) {
 #' replicates that selected it.
 #' @export
 sample_size <- function(target = 0.80, n_grid, confirm_B = 2000L, ...) {
-  stopifnot(target > 0, target < 1, length(n_grid) >= 2)
+  if (!is.numeric(target) || length(target) != 1L || is.na(target) ||
+      target <= 0 || target >= 1) {
+    stop("`target` must be a single power strictly between 0 and 1, ",
+         "but it is ", paste(format(target), collapse = ", "),
+         ". Power of exactly 1 is unattainable by simulation.")
+  }
+  if (!is.numeric(n_grid) || length(n_grid) < 2L || anyNA(n_grid)) {
+    stop("`n_grid` must be a numeric vector of at least 2 per-arm ",
+         "sample sizes with no missing values, since the target is ",
+         "found by interpolating between them; it has length ",
+         length(n_grid), ". Supply a grid that brackets the answer.")
+  }
   dots <- list(...)
+  .check_sim_dots(names(dots), "sample_size")
   # Checked before simulating, not after: inverting a curve is only
   # meaningful for one method, and running the whole grid first would
   # make the user pay for the entire study before being told the call
