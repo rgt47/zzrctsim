@@ -246,9 +246,24 @@ runin_design <- function(schedule,
   if (length(hinge) == 1L) {
     hinge <- stats::setNames(rep(hinge, length(levs)), levs)
   } else {
-    if (is.null(names(hinge))) names(hinge) <- levs
+    # Names are required rather than inferred. Assigning `levs` to an
+    # unnamed vector matched it to *sorted level* order, not to the
+    # order the arms were written, so `hinge = c(TRUE, FALSE, TRUE)`
+    # for arms low/hi/pbo was silently applied as hi/low/pbo -- model
+    # misspecification with no diagnostic. It also errored obscurely
+    # from `names<-` whenever the lengths disagreed, because that
+    # assignment ran before the length check below.
+    if (is.null(names(hinge))) {
+      stop("`hinge` must be length 1, or named for every arm level (",
+           paste(levs, collapse = ", "), "). An unnamed vector of ",
+           "length ", length(hinge), " would be matched to sorted ",
+           "level order rather than to the order the arms were ",
+           "given.")
+    }
     if (!all(levs %in% names(hinge))) {
-      stop("`hinge` must be length 1 or named for every arm level.")
+      stop("`hinge` is missing entries for arm level(s): ",
+           paste(setdiff(levs, names(hinge)), collapse = ", "),
+           ". Supply one entry per level, or a single value for all.")
     }
   }
 
@@ -260,16 +275,42 @@ runin_design <- function(schedule,
     # Subjects already have their own grids, of differing length, so
     # the columns are taken row-wise and `arm` is broadcast per
     # subject rather than per row.
-    # Sorted, not first-appearance: `arm[i]` must belong to the i-th
-    # subject by id, matching the balanced branch where id is
-    # `rep(seq_len(n), each = p)`. Using `unique()` would key the
-    # mapping to row order, so a schedule sorted by calendar date --
-    # the natural ordering for staggered accrual -- would silently
-    # assign arms to the wrong subjects.
-    ids <- sort(unique(schedule$id))
+    #
+    # `arm` is matched to subjects by IDENTITY, never by rank. Ranking
+    # is only correct for ids that are the integers 1..n: sorting a
+    # factor orders by level rather than label, and sorting character
+    # ids orders "S10" before "S2", each of which silently assigns
+    # arms to the wrong subjects. Requiring 1..n here keeps the
+    # contract identical to the balanced branch, where id is
+    # `rep(seq_len(n), each = p)` and `arm[i]` belongs to `id == i`.
+    if (is.null(attr(schedule, "J0")) ||
+        is.null(attr(schedule, "J1")) ||
+        is.null(attr(schedule, "t_last"))) {
+      stop("`schedule` is classed as a `realized_schedule` but has ",
+           "lost the phase-boundary attributes `J0`, `J1` and ",
+           "`t_last`. Subsetting columns drops them. Rebuild it with ",
+           "`realize_schedule()`, or subset rows only.")
+    }
+    raw_id <- schedule$id
+    if (is.factor(raw_id) || is.character(raw_id)) {
+      stop("`id` in a realized schedule must be integer, but it is ",
+           class(raw_id)[1], ". `arm` is matched to subject `id` ",
+           "1..n, and sorting a ", class(raw_id)[1], " id would key ",
+           "the allocation to level or lexicographic order instead. ",
+           "Use `as.integer()` on `id`, keeping `arm` in the same ",
+           "subject order.")
+    }
+    ids <- sort(unique(raw_id))
     if (n != length(ids)) {
       stop("`arm` has length ", n, " but the realized schedule holds ",
            length(ids), " subject(s); supply one arm per subject.")
+    }
+    if (!isTRUE(all.equal(as.numeric(ids), as.numeric(seq_len(n))))) {
+      stop("`id` in a realized schedule must be the integers 1 to ",
+           n, ", so that `arm[i]` belongs to subject `i`; got ",
+           paste(utils::head(ids, 5), collapse = ", "),
+           if (length(ids) > 5) ", ..." else "",
+           ". Renumber the subjects, keeping `arm` in the same order.")
     }
     t_last <- attr(schedule, "t_last")
     subj_id <- schedule$id

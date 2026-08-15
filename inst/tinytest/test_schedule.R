@@ -196,3 +196,56 @@ expect_equal(arm_map(reord(order(rs_acc$calendar))), ref_map,
              info = 'calendar-sorted rows map arms identically')
 expect_equal(ref_map, as.character(arm_acc),
              info = 'arm i belongs to subject i, as in the balanced path')
+
+# ---- ragged-path input validation -----------------------------------
+#
+# Each of these previously either crashed obscurely or, worse, ran
+# silently with the treatment allocation wrong.
+
+# A subject enrolled after close-out keeps no visits. Previously this
+# crashed with "arguments imply differing number of rows: 1, 0".
+e_late <- accrue(10, 6, "linear")
+expect_warning(
+  rs_late <- realize_schedule(s_acc, e_late,
+                              close = close_out(e_late, s_acc,
+                                                "fixed", at = 2)),
+  info = 'subjects past close-out are dropped with a warning')
+expect_true(nrow(rs_late) > 0L,
+            info = 'the surviving subjects still yield a schedule')
+expect_equal(sort(unique(rs_late$id)), seq_len(length(unique(rs_late$id))),
+             info = 'ids are renumbered 1..n after dropping')
+
+# `arm` is matched by identity, so non-integer ids are refused rather
+# than ranked: sorting a factor uses level order and sorting character
+# ids puts "S10" before "S2", each silently inverting the allocation.
+rs_f <- rs_acc; rs_f$id <- factor(rs_f$id)
+expect_error(runin_design(rs_f, arm_acc), pattern = "must be integer",
+             info = 'factor id is refused, not ranked')
+rs_c <- rs_acc; rs_c$id <- paste0("S", rs_c$id)
+expect_error(runin_design(rs_c, arm_acc), pattern = "must be integer",
+             info = 'character id is refused, not ranked')
+
+# Column-subsetting keeps the class but drops the phase boundaries.
+stripped <- rs_acc[, c("id", "enroll", "index", "time", "calendar",
+                       "phase", "h", "on_treatment")]
+expect_error(runin_design(stripped, arm_acc),
+             pattern = "phase-boundary",
+             info = 'a degraded realized_schedule is rejected by name')
+
+# An unnamed multi-element `hinge` was matched to sorted level order.
+expect_error(
+  runin_design(trial_schedule(run_in = 2, treatment = 4, interval = 3),
+               factor(rep(c("a", "b", "c"), each = 2)),
+               hinge = c(TRUE, FALSE)),
+  pattern = "named for every arm level",
+  info = 'unnamed hinge is refused rather than silently reordered')
+
+expect_error(realize_schedule(s_acc, numeric(0), close = 20),
+             pattern = "non-empty numeric",
+             info = 'empty enroll is refused')
+expect_error(realize_schedule(s_acc, c(1, NA, 3), close = 20),
+             pattern = "non-empty numeric",
+             info = 'NA enroll is refused')
+expect_error(realize_schedule(s_acc, c(1, 2), close = Inf),
+             pattern = "single finite",
+             info = 'non-finite close is refused')

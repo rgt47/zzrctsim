@@ -154,7 +154,19 @@ close_out <- function(enroll, schedule, rule = c("lslv", "fixed"),
 #' @export
 realize_schedule <- function(schedule, enroll, close,
                              extend = TRUE) {
-  stopifnot(inherits(schedule, "trial_schedule"))
+  if (!inherits(schedule, "trial_schedule")) {
+    stop("`schedule` must be a `trial_schedule` from ",
+         "`trial_schedule()`; got an object of class ",
+         paste(class(schedule), collapse = "/"), ".")
+  }
+  if (!is.numeric(enroll) || !length(enroll) || anyNA(enroll)) {
+    stop("`enroll` must be a non-empty numeric vector of enrollment ",
+         "times with no missing values; see `accrue()`.")
+  }
+  if (!is.numeric(close) || length(close) != 1L || !is.finite(close)) {
+    stop("`close` must be a single finite close-out time; see ",
+         "`close_out()`.")
+  }
   interval <- attr(schedule, "interval")
   J1 <- attr(schedule, "J1")
   if (extend && (is.na(interval) || is.null(interval))) {
@@ -193,6 +205,12 @@ realize_schedule <- function(schedule, enroll, close,
 
     cal <- e + t_j
     keep <- cal <= close + .Machine$double.eps^0.5
+    # A subject enrolled so late that even their baseline falls after
+    # close-out keeps no visits at all. `data.frame()` would then try
+    # to recycle the scalar `id` against zero-length columns and fail
+    # with "arguments imply differing number of rows". Return NULL and
+    # report the affected subjects once, below.
+    if (!any(keep)) return(NULL)
     data.frame(
       id = i, enroll = e,
       index = idx[keep], time = t_j[keep],
@@ -200,6 +218,27 @@ realize_schedule <- function(schedule, enroll, close,
       h = h[keep], on_treatment = ot[keep]
     )
   })
+
+  dropped <- which(vapply(rows, is.null, logical(1)))
+  if (length(dropped)) {
+    warning(length(dropped), " subject(s) enrolled after the ",
+            "close-out date and contribute no visits (position(s) ",
+            paste(utils::head(dropped, 5), collapse = ", "),
+            if (length(dropped) > 5) ", ..." else "",
+            "). They are dropped, so the realized schedule holds ",
+            length(enroll) - length(dropped), " of ", length(enroll),
+            " subjects and its `id` values are renumbered. Supply an ",
+            "`arm` of the reduced length to `runin_design()`, or ",
+            "extend `close`.")
+    rows <- rows[-dropped]
+    if (!length(rows)) {
+      stop("No subject has any visit on or before the close-out ",
+           "date; every enrollment falls after `close`.")
+    }
+    # Renumber so that ids remain 1..n, which is the contract
+    # `runin_design()` matches `arm` against.
+    for (k in seq_along(rows)) rows[[k]]$id <- k
+  }
 
   out <- do.call(rbind, rows)
   out$phase <- factor(out$phase,
