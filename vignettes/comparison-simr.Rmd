@@ -3,7 +3,7 @@ title: "zzrctsim and simr: two routes to simulated power"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{zzrctsim and simr: two routes to simulated power}
-  %\VignetteEngine{knitr::knitr}
+  %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 

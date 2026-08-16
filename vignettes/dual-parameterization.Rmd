@@ -3,7 +3,7 @@ title: "Two ways to declare a data-generating mechanism"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Two ways to declare a data-generating mechanism}
-  %\VignetteEngine{knitr::knitr}
+  %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 

@@ -3,7 +3,7 @@ title: "Time-to-event endpoints: single, recurrent, and derived"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Time-to-event endpoints: single, recurrent, and derived}
-  %\VignetteEngine{knitr::knitr}
+  %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 

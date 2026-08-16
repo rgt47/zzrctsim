@@ -3,7 +3,7 @@ title: "Missing data: mechanisms, masks, and reference-based trajectories"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Missing data: mechanisms, masks, and reference-based trajectories}
-  %\VignetteEngine{knitr::knitr}
+  %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 
