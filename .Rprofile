@@ -131,7 +131,7 @@ if (!renv_enabled) {
     auto_init <- Sys.getenv("ZZCOLLAB_AUTO_INIT", "true")
     is_project <- file.exists("DESCRIPTION") || getwd() == "/home/analyst/project"
 
-    if (tolower(auto_init) %in% c("true", "t", "1") && is_project) {
+    if (tolower(auto_init) %in% c("true", "t", "1") && is_project && !in_ci) {
       message("\n🔧 ZZCOLLAB: Auto-initializing renv for new project...")
       tryCatch({
         renv_init_quiet()
