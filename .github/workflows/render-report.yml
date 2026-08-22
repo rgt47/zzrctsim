@@ -216,6 +216,15 @@ jobs:
             quarto render analysis/report/index.qmd --to html
 
       # --- Host render: no Dockerfile; renv pins packages when present ---
+      # Packages with a compiled curl dependency (pak itself, among others)
+      # need libcurl's headers to build from source; the container backend's
+      # check job installs this via apt-get, but the host runner has no
+      # equivalent step, so a DESCRIPTION-only (no renv.lock) restore fails
+      # here with "Configuration failed because libcurl was not found."
+      - name: Install system dependencies (host)
+        if: steps.mode.outputs.backend == 'host'
+        run: sudo apt-get update -qq && sudo apt-get install -y libcurl4-openssl-dev libssl-dev libxml2-dev
+
       - name: Set up pandoc
         if: steps.mode.outputs.backend == 'host'
         uses: r-lib/actions/setup-pandoc@v2
