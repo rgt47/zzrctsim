@@ -379,7 +379,7 @@ res <- run_simulation(
     dgm_conditional(G = diag(c(9, 0.04)), sigma2 = 4),
     beta = c(x_slope = 0.5, x_trt_active = -0.25),
     intercept = 20),
-  analyse = list(ancova = function(z) fit_ancova(z, reference = 'placebo')),
+  analyze = list(ancova = function(z) fit_ancova(z, reference = 'placebo')),
   estimand = estimand('final-visit contrast', theta), seed = 7L)
 perf <- compute_performance(res)
 knitr::kable(perf[, c('measure', 'estimate', 'mcse')], digits = 4,
@@ -413,7 +413,7 @@ dfn <- function(n) runin_design(sch3,
          levels = c('placebo', 'active')), reference = 'placebo')
 common <- list(design_fn = dfn, dgm = gd3, beta = b3, intercept = 20,
   estimand = estimand('final contrast', b3[['x_trt_active']] * max(sch3$time)),
-  analyse = list(ancova = function(z) fit_ancova(z, reference = 'placebo')),
+  analyze = list(ancova = function(z) fit_ancova(z, reference = 'placebo')),
   B = 300L, seed = 5L)
 ss_c <- do.call(sample_size, c(list(target = 0.80,
   n_grid = c(40, 70, 110, 160), confirm_B = 800L), common))
@@ -826,7 +826,7 @@ fit_glm <- function(z) {
 res <- run_simulation(
   B = 300,
   generate = function() generate_outcomes(d, gb, beta = b, intercept = 0),
-  analyse = list(glm = fit_glm),
+  analyze = list(glm = fit_glm),
   estimand = estimand('conditional log-OR at final visit', NA_real_),
   seed = 2L
 )
