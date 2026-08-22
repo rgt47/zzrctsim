@@ -35,8 +35,10 @@ Imports:
     stats,
     utils
 Suggests:
+    here,
     knitr,
     lme4,
+    pkgload,
     rmarkdown,
     simr,
     survival,
