@@ -61,7 +61,7 @@ get, whatever `psi1` and `psi2` are. Without this, a hazard specified
 on an untransformed scale saturates:
 
 ```{r saturation}
-# An uncentred hazard at a realistic ADAS-Cog level:
+# An uncentered hazard at a realistic ADAS-Cog level:
 plogis(qlogis(0.12) + 0.25 * 20)
 ```
 
