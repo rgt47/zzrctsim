@@ -1,7 +1,7 @@
 Package: zzrctsim
 Title: Simulation of Longitudinal Randomized Trials with Conditional
     and Marginal Data-Generating Mechanisms
-Version: 0.1.0
+Version: 0.2.0
 Authors@R:
     person(given = "Ronald G.", family = "Thomas", email = "rgthomas@ucsd.edu", role = c("aut", "cre"))
 Description: Simulates longitudinal randomized clinical trials in order

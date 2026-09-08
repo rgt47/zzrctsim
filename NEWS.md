@@ -1,3 +1,44 @@
+# zzrctsim 0.2.0
+
+## Correctness fixes
+
+* **The Monte Carlo standard error of `mean_ci_width` was understated
+  when any confidence interval was missing.** The estimate averaged the
+  non-missing widths, correctly, but its MCSE divided by the number of
+  converged replicates rather than by the number of widths actually
+  averaged. With 100 of 500 intervals absent the reported MCSE was 11
+  percent below the truth. That matters more than its size suggests:
+  the MCSE is what says whether enough replicates have been run, so
+  understating it makes a simulation look more precise than its
+  replicates support. Every other measure already counted its own
+  non-missing values.
+
+## Tests
+
+* `test_morris.R` now checks each performance measure against the
+  Morris, White and Crowther (2019) Table 6 formula computed by hand
+  in the test, rather than against the implementation's own output:
+  bias, empirical SE, model SE, relative error of the model SE, MSE,
+  coverage, bias-eliminated coverage, rejection rate and mean interval
+  width, plus the MCSEs of bias and empirical SE.
+* Suite grows from 311 assertions to 338.
+
+## Verified unchanged
+
+Checked during review and found correct:
+
+* `sim_streams()` and `with_rng_state()` restore both the generator
+  kind and the caller's `.Random.seed`, so neither disturbs the calling
+  session. Replaying a substream reproduces its draws exactly, distinct
+  substreams differ, no two substream states coincide, and across 400
+  substreams the pairwise correlations are consistent with
+  independence (mean 0.0005) with first draws passing a
+  Kolmogorov-Smirnov test against the standard normal.
+* `bias_elim_coverage` is written as a shifted comparison but is
+  algebraically the coverage of `mean(est)`, which is its definition.
+* `mean_ci_width` reports the full interval width, matching its
+  documentation, despite being computed via a half-width.
+
 # zzrctsim 0.1.0
 
 First release.

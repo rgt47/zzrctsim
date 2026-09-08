@@ -146,8 +146,14 @@ compute_performance <- function(results, theta = NULL, alpha = 0.05) {
     add("coverage", cvg, cvg_mcse),
     add("bias_elim_coverage", be, be_mcse),
     add("rejection", rej, rej_mcse),
+    # Divide by the number of widths actually averaged, not by every
+    # converged replicate. The two differ whenever an interval is
+    # missing, and the MCSE was then understated: with 100 of 500
+    # intervals absent it read 11 percent low, making the estimate look
+    # more precise than the replicates support. Every other measure
+    # here already counts its own non-missing values.
     add("mean_ci_width", mean(2 * half, na.rm = TRUE),
-        stats::sd(2 * half, na.rm = TRUE) / sqrt(B))
+        stats::sd(2 * half, na.rm = TRUE) / sqrt(sum(!is.na(half))))
   )
 }
 

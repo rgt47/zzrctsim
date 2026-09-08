@@ -186,3 +186,61 @@ expect_equal(nsim_for_mcse("proportion", mcse = 0.005, p = 0.05),
              info = 'nsim for a proportion')
 expect_equal(nsim_for_mcse("proportion", mcse = 0.016, p = 0.5), 977L,
              info = 'worst-case proportion at MCSE 0.016')
+
+# --- regressions -------------------------------------------------
+
+# Every performance measure is checked against its Morris et al. (2019)
+# Table 6 definition computed by hand, so the test states the formula
+# rather than trusting the implementation.
+set.seed(9)
+B <- 500
+theta_r <- 2
+est_r <- stats::rnorm(B, theta_r + 0.1, 0.5)
+se_r <- abs(stats::rnorm(B, 0.5, 0.05))
+res_r <- data.frame(
+  method = "m", estimate = est_r, se = se_r,
+  ci_lower = est_r - 1.96 * se_r, ci_upper = est_r + 1.96 * se_r,
+  p_value = 2 * stats::pnorm(-abs(est_r / se_r)), converged = TRUE)
+p_r <- compute_performance(res_r, theta = theta_r)
+val <- function(k) p_r$estimate[p_r$measure == k]
+mc <- function(k) p_r$mcse[p_r$measure == k]
+
+expect_equal(val("bias"), mean(est_r) - theta_r, info = "bias")
+expect_equal(val("emp_se"), stats::sd(est_r), info = "empirical SE")
+expect_equal(val("mod_se"), sqrt(mean(se_r^2)), info = "model SE")
+expect_equal(val("rel_error_mod_se"),
+             100 * (sqrt(mean(se_r^2)) / stats::sd(est_r) - 1),
+             info = "relative error of the model SE")
+expect_equal(val("mse"), mean((est_r - theta_r)^2), info = "MSE")
+expect_equal(val("coverage"),
+             mean(res_r$ci_lower <= theta_r & res_r$ci_upper >= theta_r),
+             info = "coverage")
+expect_equal(val("bias_elim_coverage"),
+             mean(res_r$ci_lower <= mean(est_r) &
+                    res_r$ci_upper >= mean(est_r)),
+             info = "bias-eliminated coverage is coverage of mean(est)")
+expect_equal(val("rejection"), mean(res_r$p_value < 0.05),
+             info = "rejection rate")
+expect_equal(val("mean_ci_width"),
+             mean(res_r$ci_upper - res_r$ci_lower),
+             info = "mean CI width is the full width, not the half-width")
+expect_equal(mc("bias"), sqrt(stats::var(est_r) / B), info = "bias MCSE")
+expect_equal(mc("emp_se"), stats::sd(est_r) / sqrt(2 * (B - 1)),
+             info = "empirical SE MCSE")
+
+# The MCSE of the mean interval width must be scaled by the number of
+# widths actually averaged. Dividing by every converged replicate
+# understated it whenever an interval was missing: with 100 of 500
+# absent it read 11 percent low, which matters because the MCSE is what
+# tells you whether enough replicates have been run.
+res_m <- res_r
+res_m$ci_lower[1:100] <- NA
+res_m$ci_upper[1:100] <- NA
+p_m <- compute_performance(res_m, theta = theta_r)
+w_m <- (res_m$ci_upper - res_m$ci_lower)
+w_m <- w_m[!is.na(w_m)]
+expect_equal(p_m$mcse[p_m$measure == "mean_ci_width"],
+             stats::sd(w_m) / sqrt(length(w_m)),
+             info = "mean_ci_width MCSE uses the non-missing count")
+expect_equal(p_m$estimate[p_m$measure == "mean_ci_width"], mean(w_m),
+             info = "mean_ci_width averages the non-missing widths")
