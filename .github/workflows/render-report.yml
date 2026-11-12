@@ -1,4 +1,4 @@
-# zzcollab render-report.yml v0.3.0
+# zzcollab render-report.yml v0.3.0 (zzcollab 257e8ad)
 #
 # Tier 3 (render) for all zzcollab research compendia. Self-adapting: the
 # environment backend is detected at run time from artifact presence, so the
@@ -20,6 +20,20 @@
 # Path-filtered to run only when analysis code or the environment definition
 # changes.
 #
+# Reports that read data absent from git (restricted or large raw data, or
+# derived data built from it) cannot render in CI. Declare them in an
+# optional .github/report-ci.yml instead of editing this workflow:
+#
+#   render: skip        # skip every render step (default: run)
+#   skip:               # or skip only these reports (paths or globs)
+#     - analysis/report/report.Rmd
+#   reason: 'Reads restricted data that is not committed.'
+#
+# The environment (image build or package restore) is still built and
+# checked, and each skip is reported as a run notice, so a skip is visible
+# rather than a silent pass. `skip:` applies to the report.Rmd renders;
+# `render: skip` also covers the Quarto steps.
+#
 name: Render Reports
 
 on:
@@ -33,6 +47,7 @@ on:
       - 'Dockerfile'
       - 'flake.nix'
       - '.github/workflows/render-report.yml'
+      - '.github/report-ci.yml'
   pull_request:
     branches: [ main, master ]
     paths:
@@ -42,13 +57,15 @@ on:
       - 'renv.lock'
       - 'Dockerfile'
       - 'flake.nix'
+      - '.github/workflows/render-report.yml'
+      - '.github/report-ci.yml'
 
 jobs:
   render:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Detect environment backend
         id: mode
@@ -63,6 +80,31 @@ jobs:
             echo "backend=host" >> "$GITHUB_OUTPUT"
             echo "Environment: host runner"
           fi
+          cfg=.github/report-ci.yml
+          render=run; reason=''; skip=''
+          if [ -f "$cfg" ]; then
+            render=$(yq -r '.render // "run"' "$cfg")
+            reason=$(yq -r '.reason // ""' "$cfg")
+            skip=$(yq -r '(.skip // [])[]' "$cfg")
+            case "$render" in
+              run|skip) ;;
+              *) echo "::error file=$cfg::render must be run or skip, not '$render'"
+                 exit 1 ;;
+            esac
+          fi
+          echo "render=$render" >> "$GITHUB_OUTPUT"
+          {
+            echo 'skip<<ZZC_EOF'; echo "$skip"; echo 'ZZC_EOF'
+          } >> "$GITHUB_OUTPUT"
+          note="${reason:-declared in $cfg}"
+          if [ "$render" = skip ]; then
+            echo "::notice title=Render skipped::$note"
+            echo "Render skipped: $note" >> "$GITHUB_STEP_SUMMARY"
+          elif [ -n "$skip" ]; then
+            list=$(echo "$skip" | paste -sd ' ' -)
+            echo "::notice title=Reports skipped::$list ($note)"
+            echo "Reports skipped: $list ($note)" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       # --- Nix render: the flake pins the environment; render in `nix develop` ---
       - name: Install Nix
@@ -70,7 +112,9 @@ jobs:
         uses: DeterminateSystems/nix-installer-action@main
 
       - name: Render all manuscripts (nix)
-        if: steps.mode.outputs.backend == 'nix'
+        if: steps.mode.outputs.backend == 'nix' && steps.mode.outputs.render != 'skip'
+        env:
+          REPORT_SKIP: ${{ steps.mode.outputs.skip }}
         run: |
           nix develop -c Rscript -e '
             rmds <- unique(c(
@@ -79,6 +123,8 @@ jobs:
               list.files("analysis/posts", pattern = "[.]Rmd$",
                          full.names = TRUE)
             ))
+            skip <- Filter(nzchar, strsplit(Sys.getenv("REPORT_SKIP"), "\n")[[1]])
+            if (length(skip)) rmds <- setdiff(rmds, Sys.glob(skip))
             cat("Found", length(rmds), "manuscripts to render\n\n")
             failed <- character()
             for (rmd in rmds) {
@@ -105,7 +151,7 @@ jobs:
       # --- Containerised render: environment pinned by the project image ---
       - name: Set up Buildx
         if: steps.mode.outputs.backend == 'docker'
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build Docker image
         if: steps.mode.outputs.backend == 'docker'
@@ -114,14 +160,16 @@ jobs:
           docker build -t compendium-env .
 
       - name: Render all manuscripts (container)
-        if: steps.mode.outputs.backend == 'docker'
+        if: steps.mode.outputs.backend == 'docker' && steps.mode.outputs.render != 'skip'
+        env:
+          REPORT_SKIP: ${{ steps.mode.outputs.skip }}
         run: |
           # Render as root: reports may \usepackage a LaTeX package the warm-up
           # did not pre-bake, so tinytex installs it at render time, which writes
           # to the root:staff TeX tree (tlpdb, format cache). The non-root run
           # user cannot, so the batch render runs as root. Interactive 'make r'
           # stays non-root.
-          docker run --rm --user root -e CI=true \
+          docker run --rm --user root -e CI=true -e REPORT_SKIP \
             -v ${{ github.workspace }}:/project \
             -w /project compendium-env \
             Rscript --vanilla -e '
@@ -156,6 +204,8 @@ jobs:
                 list.files("analysis/posts", pattern = "[.]Rmd$",
                            full.names = TRUE)
               ))
+              skip <- Filter(nzchar, strsplit(Sys.getenv("REPORT_SKIP"), "\n")[[1]])
+              if (length(skip)) rmds <- setdiff(rmds, Sys.glob(skip))
               cat("Found", length(rmds), "manuscripts to render\n\n")
               failed <- character()
               for (rmd in rmds) {
@@ -190,7 +240,7 @@ jobs:
       # the R sessions quarto spawns (which run outside the project root, in
       # analysis/report/) via the Rprofile.site shim baked by modules/docker.sh.
       - name: Render Quarto book (container)
-        if: steps.mode.outputs.backend == 'docker' && hashFiles('analysis/report/_quarto.yml') != ''
+        if: steps.mode.outputs.backend == 'docker' && steps.mode.outputs.render != 'skip' && hashFiles('analysis/report/_quarto.yml') != ''
         run: |
           # Render HTML only. A book often declares an html+pdf format, but the
           # PDF path pulls in LaTeX (luatex), which fails in CI on missing figure
@@ -208,7 +258,7 @@ jobs:
       # book also has index.qmd (its preface), so skip when the book project
       # config is present: the whole-book render above already covers it.
       - name: Render Quarto report index.qmd (container)
-        if: steps.mode.outputs.backend == 'docker' && hashFiles('analysis/report/index.qmd') != '' && hashFiles('analysis/report/_quarto.yml') == ''
+        if: steps.mode.outputs.backend == 'docker' && steps.mode.outputs.render != 'skip' && hashFiles('analysis/report/index.qmd') != '' && hashFiles('analysis/report/_quarto.yml') == ''
         run: |
           docker run --rm --user root -e CI=true \
             -v ${{ github.workspace }}:/project \
@@ -217,10 +267,8 @@ jobs:
 
       # --- Host render: no Dockerfile; renv pins packages when present ---
       # Packages with a compiled curl dependency (pak itself, among others)
-      # need libcurl's headers to build from source; the container backend's
-      # check job installs this via apt-get, but the host runner has no
-      # equivalent step, so a DESCRIPTION-only (no renv.lock) restore fails
-      # here with "Configuration failed because libcurl was not found."
+      # need libcurl's headers to build from source, and the host runner,
+      # unlike the container check job, does not install them.
       - name: Install system dependencies (host)
         if: steps.mode.outputs.backend == 'host'
         run: sudo apt-get update -qq && sudo apt-get install -y libcurl4-openssl-dev libssl-dev libxml2-dev
@@ -250,7 +298,9 @@ jobs:
           Rscript -e "if (!requireNamespace('rmarkdown', quietly = TRUE)) install.packages('rmarkdown', repos = 'https://cloud.r-project.org')"
 
       - name: Render all manuscripts (host)
-        if: steps.mode.outputs.backend == 'host'
+        if: steps.mode.outputs.backend == 'host' && steps.mode.outputs.render != 'skip'
+        env:
+          REPORT_SKIP: ${{ steps.mode.outputs.skip }}
         run: |
           Rscript -e '
             rmds <- unique(c(
@@ -259,6 +309,8 @@ jobs:
               list.files("analysis/posts", pattern = "[.]Rmd$",
                          full.names = TRUE)
             ))
+            skip <- Filter(nzchar, strsplit(Sys.getenv("REPORT_SKIP"), "\n")[[1]])
+            if (length(skip)) rmds <- setdiff(rmds, Sys.glob(skip))
             cat("Found", length(rmds), "manuscripts to render\n\n")
             failed <- character()
             for (rmd in rmds) {
@@ -284,7 +336,7 @@ jobs:
 
       - name: Upload rendered reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rendered-reports
           path: |
