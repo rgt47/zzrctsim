@@ -1,4 +1,4 @@
-# zzcollab render-report.yml v0.3.0 (zzcollab 257e8ad)
+# zzcollab render-report.yml v0.3.0 (zzcollab b80c1fd)
 #
 # Tier 3 (render) for all zzcollab research compendia. Self-adapting: the
 # environment backend is detected at run time from artifact presence, so the
@@ -28,11 +28,14 @@
 #   skip:               # or skip only these reports (paths or globs)
 #     - analysis/report/report.Rmd
 #   reason: 'Reads restricted data that is not committed.'
+#   timeout: 120        # minutes allowed per render step (default 120)
 #
 # The environment (image build or package restore) is still built and
 # checked, and each skip is reported as a run notice, so a skip is visible
 # rather than a silent pass. `skip:` applies to the report.Rmd renders;
 # `render: skip` also covers the Quarto steps.
+# `timeout:` bounds each render step, so a hung render fails in that
+# time rather than holding a runner for the 6-hour job limit.
 #
 name: Render Reports
 
@@ -63,6 +66,10 @@ on:
 jobs:
   render:
     runs-on: ubuntu-latest
+    env:
+      # Authenticates GitHub-hosted package lookups on the host and Nix
+      # paths (60 unauthenticated API requests an hour per runner IP).
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - uses: actions/checkout@v7
@@ -81,17 +88,23 @@ jobs:
             echo "Environment: host runner"
           fi
           cfg=.github/report-ci.yml
-          render=run; reason=''; skip=''
+          render=run; reason=''; skip=''; timeout=120
           if [ -f "$cfg" ]; then
             render=$(yq -r '.render // "run"' "$cfg")
             reason=$(yq -r '.reason // ""' "$cfg")
             skip=$(yq -r '(.skip // [])[]' "$cfg")
+            timeout=$(yq -r '.timeout // 120' "$cfg")
             case "$render" in
               run|skip) ;;
               *) echo "::error file=$cfg::render must be run or skip, not '$render'"
                  exit 1 ;;
             esac
+            case "$timeout" in
+              ''|*[!0-9]*) echo "::error file=$cfg::timeout must be a whole number of minutes, not '$timeout'"
+                 exit 1 ;;
+            esac
           fi
+          echo "timeout=$timeout" >> "$GITHUB_OUTPUT"
           echo "render=$render" >> "$GITHUB_OUTPUT"
           {
             echo 'skip<<ZZC_EOF'; echo "$skip"; echo 'ZZC_EOF'
@@ -113,6 +126,7 @@ jobs:
 
       - name: Render all manuscripts (nix)
         if: steps.mode.outputs.backend == 'nix' && steps.mode.outputs.render != 'skip'
+        timeout-minutes: ${{ fromJSON(steps.mode.outputs.timeout) }}
         env:
           REPORT_SKIP: ${{ steps.mode.outputs.skip }}
         run: |
@@ -161,6 +175,7 @@ jobs:
 
       - name: Render all manuscripts (container)
         if: steps.mode.outputs.backend == 'docker' && steps.mode.outputs.render != 'skip'
+        timeout-minutes: ${{ fromJSON(steps.mode.outputs.timeout) }}
         env:
           REPORT_SKIP: ${{ steps.mode.outputs.skip }}
         run: |
@@ -241,6 +256,7 @@ jobs:
       # analysis/report/) via the Rprofile.site shim baked by modules/docker.sh.
       - name: Render Quarto book (container)
         if: steps.mode.outputs.backend == 'docker' && steps.mode.outputs.render != 'skip' && hashFiles('analysis/report/_quarto.yml') != ''
+        timeout-minutes: ${{ fromJSON(steps.mode.outputs.timeout) }}
         run: |
           # Render HTML only. A book often declares an html+pdf format, but the
           # PDF path pulls in LaTeX (luatex), which fails in CI on missing figure
@@ -259,6 +275,7 @@ jobs:
       # config is present: the whole-book render above already covers it.
       - name: Render Quarto report index.qmd (container)
         if: steps.mode.outputs.backend == 'docker' && steps.mode.outputs.render != 'skip' && hashFiles('analysis/report/index.qmd') != '' && hashFiles('analysis/report/_quarto.yml') == ''
+        timeout-minutes: ${{ fromJSON(steps.mode.outputs.timeout) }}
         run: |
           docker run --rm --user root -e CI=true \
             -v ${{ github.workspace }}:/project \
@@ -299,6 +316,7 @@ jobs:
 
       - name: Render all manuscripts (host)
         if: steps.mode.outputs.backend == 'host' && steps.mode.outputs.render != 'skip'
+        timeout-minutes: ${{ fromJSON(steps.mode.outputs.timeout) }}
         env:
           REPORT_SKIP: ${{ steps.mode.outputs.skip }}
         run: |
