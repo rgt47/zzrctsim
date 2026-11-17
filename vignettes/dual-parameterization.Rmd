@@ -66,8 +66,12 @@ random intercept model produces compound symmetry and nothing else.
 ## Why
 
 `V = Z G Z' + sigma^2 I` requires `Z G Z'` to be positive
-semi-definite with rank at most `q`. Subtracting `sigma^2 I` shifts
-every eigenvalue equally, so the question is settled by the spectrum.
+semi-definite with rank at most `q`. A target `V` is therefore
+reachable from `q` random effects only if some `sigma^2 >= 0` makes
+`V - sigma^2 I` positive semi-definite with rank at most `q`.
+Subtracting `sigma^2 I` shifts every eigenvalue equally, so the
+question is settled by the spectrum: take `sigma^2` to be the smallest
+eigenvalue and count what remains.
 
 ```{r spectrum}
 round(eigen(ar1(tt))$values, 4)
@@ -174,3 +178,20 @@ dat <- generate_outcomes(d, gm,
                          intercept = 20)
 round(cor(matrix(dat$y, ncol = nrow(s), byrow = TRUE))[1, ], 3)
 ```
+
+## Scope
+
+Everything above is a statement about a Gaussian response.
+`certify()`, `as_conditional()` and `as_marginal()` are results about
+`V = Z G Z' + sigma^2 I`, and they have no non-Gaussian analogue,
+because the marginal parameterization they convert to does not exist
+outside that case. For a binomial or Poisson response the variance is
+determined by the mean, `cov_at()` refuses, and `linpred_cov()`
+reports the covariance `Z G Z'` induced on the linear-predictor scale
+instead; see `vignette('design')`.
+
+The relationship between the two parameterizations is itself the
+subject of several of the research compendia this package was built
+for: one asks when random-effects models reduce to simpler forms,
+another uses the Woodbury identity to move between the two variance
+expressions, and two more turn on the same mapping.

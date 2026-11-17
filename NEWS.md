@@ -1,3 +1,32 @@
+# zzrctsim (development version)
+
+## Documentation
+
+* The design report formerly kept in `analysis/report/report.Rmd` is
+  now part of the package documentation, so it is installed, checked
+  and rebuilt with the package rather than rendered separately.
+
+  * New `vignette('design')`: purpose, the layered pipeline and its
+    three contracts, what is deliberately out of scope, the Monte
+    Carlo conventions of the driver, the exponential-family scope,
+    supported families, the three retained scales, which operations
+    are Gaussian-only and how they are guarded, and open work.
+  * New `vignette('trial-design')`: run-in, treatment and common-close
+    phases, the common-close and per-arm hinge conventions, staggered
+    accrual with a common close-out, and sample size by simulation
+    with and without 30% MAR dropout. The sample-size result is
+    precomputed in `inst/extdata/sample-size-dropout.csv` by
+    `inst/scripts/sample-size-dropout.R`, because the computation
+    takes over a minute.
+  * `vignette('missing-data')` gains a section on non-Gaussian
+    responses, showing which dropout and reference-based operations
+    are refused and why; `vignette('dual-parameterization')` states
+    the reachability condition explicitly and its Gaussian-only
+    scope; `vignette('time-to-event')` documents the recurrent-event
+    and delayed-effect inversions.
+* `here` and `pkgload`, used only by the report, are removed from
+  Suggests.
+
 # zzrctsim 0.2.0
 
 ## Correctness fixes

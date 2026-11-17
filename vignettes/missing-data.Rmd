@@ -34,8 +34,9 @@ mean(is.na(dat$y))
 
 ## One model, three mechanisms
 
-The dropout hazard follows Diggle and Kenward (1994). For a subject
-still under observation at visit *j*:
+Dropout follows the selection-model factorization
+`f(Y, R) = f(Y) f(R | Y)`, with the discrete-time hazard of Diggle and
+Kenward (1994). For a subject still under observation at visit *j*:
 
 ```
 logit P(drop at j) = psi0 + psi1 (y_{j-1} - c) + psi2 (y_j - c)
@@ -56,8 +57,9 @@ contrast between MAR and MNAR should vary one thing, not two.
 
 ## The target is the realized dropout
 
-`psi0` is calibrated so that the requested proportion is the one you
-get, whatever `psi1` and `psi2` are. Without this, a hazard specified
+`psi0` is calibrated so that the requested proportion is the expected
+proportion of subjects with any missing observation, whatever `psi1`
+and `psi2` are. Without this, a hazard specified
 on an untransformed scale saturates:
 
 ```{r saturation}
@@ -84,6 +86,26 @@ rbind(spec(0.15), spec(0.30),
 ```
 
 `psi0` moves to absorb the change; the target does not.
+
+Calibration matches the *expected* proportion exactly, as the
+`expected` column shows; the `realized` column is a single random
+mask. Subjects drop out independently given the complete data, so the
+realized proportion is a binomial draw around the expectation, with
+standard error `sqrt(p * (1 - p) / n)` for `n` subjects. With 600
+subjects that is about 0.015 at a target of 0.15:
+
+```{r calibration-se}
+n_subj <- length(unique(dat$id))
+p <- c(0.15, 0.30)
+data.frame(target = p, binomial_se = round(sqrt(p * (1 - p) / n_subj), 4))
+```
+
+A realized value of 0.108 against a target of 0.15, as in the first
+row, is a draw about 2.9 standard errors low. That is unusual for one
+draw but is sampling variation, not miscalibration: over 5,000 masks
+drawn from the same data with the calibrated `psi0` held fixed, the
+mean realized proportion was 0.1499 (MCSE 0.0002), with a standard
+deviation of 0.0145 matching the binomial value.
 
 Because the hazards depend only on complete-data responses, the
 expected proportion has a closed form, `1 - prod(1 - p_j)` averaged
@@ -183,29 +205,100 @@ puts first — inexpressible.
 ## What dropout costs
 
 The reason for keeping the layers separate: you can price the
-missingness directly.
+missingness directly. The treatment slope used so far, `-0.25` per
+unit time, gives a final-visit contrast of `-3.75` points, which this
+design detects with power indistinguishable from one with or without
+dropout, so a comparison at that effect shows nothing. The comparison
+below therefore uses a smaller slope, `-0.05`, giving a final-visit
+contrast of `-0.75` points, at which complete-data power is moderate
+and the loss from dropout is visible.
 
 ```{r cost}
+b_cost <- c(x_slope = 0.5, x_trt_active = -0.05)
 run <- function(drop) {
   gen <- function() {
-    z <- generate_outcomes(d, g, beta = b, intercept = 20)
+    z <- generate_outcomes(d, g, beta = b_cost, intercept = 20)
     if (drop) z <- apply_mask(z, dropout_mask(z, target = 0.30,
                                               psi1 = 0.10))
     z
   }
   res <- run_simulation(
     B = 150, generate = gen,
-    analyze = list(a = function(z) fit_ancova(z, reference = "placebo")),
-    estimand = estimand("final contrast",
-                        b[["x_trt_active"]] * max(s$time)),
+    analyze = list(a = function(z) fit_ancova(z, reference = 'placebo')),
+    estimand = estimand('final contrast',
+                        b_cost[['x_trt_active']] * max(s$time)),
     seed = 4L)
   p <- compute_performance(res)
-  p$estimate[p$measure %in% c("emp_se", "rejection")]
+  e <- p[p$measure == 'emp_se', ]
+  r <- p[p$measure == 'rejection', ]
+  data.frame(emp_se = e$estimate, power = r$estimate,
+             power_mcse = r$mcse)
 }
-data.frame(scenario = c("complete", "30% MAR dropout"),
-           rbind(run(FALSE), run(TRUE)))
+cbind(scenario = c('complete', '30% MAR dropout'),
+      rbind(run(FALSE), run(TRUE))) |>
+  knitr::kable(digits = 3)
 ```
 
-The columns are empirical standard error and power. Dropout inflates
-the first and reduces the second; `sample_size()` prices the same
-thing in subjects.
+The columns are the empirical standard error of the estimated
+contrast, the power at the two-sided 0.05 level, and the Monte Carlo
+standard error of that power. Dropout inflates the first and reduces
+the second. The two scenarios share a seed, so their replicates use
+common random numbers and the difference in power is estimated more
+precisely than the two MCSEs taken separately suggest. `sample_size()`
+prices the same loss in subjects (see `vignette('trial-design')`).
+
+## Non-Gaussian responses
+
+Two of the operations above presuppose a Gaussian response, and both
+are guarded.
+
+**Response-dependent dropout.** The hazard reads the response
+centered at `c`, so two things are scale-dependent: the default
+centering, the mean of `y`; and the interpretation of `psi1` as a
+change in log-odds per unit of `y`. The guard is deliberately narrow.
+MCAR is permitted for every family, because its hazard never reads `y`
+at all. Only response-dependent missingness is restricted, and it is
+permitted for a non-Gaussian family as soon as `center` is supplied
+explicitly, since supplying it is the act of deliberation the guard
+exists to force.
+
+**Reference-based trajectories.** `reference_based()` preserves each
+subject's additive residual `y - mu` while shifting the mean. On a
+count or binary scale that construction produces values outside the
+support: a probability shifted by a residual is not a probability, and
+a shifted count need not be an integer. The function refuses rather
+than returning impossible data.
+
+```{r binary-data}
+gb <- dgm_conditional(G = matrix(0.5), family = binomial(),
+                      z = function(t) matrix(1, length(t), 1))
+ob <- generate_outcomes(d, gb, beta = c(x_slope = 0.02,
+                                        x_trt_active = -0.05),
+                        intercept = 0)
+mk_b <- dropout_mask(ob, target = 0.30)
+```
+
+```{r binary-refuse, error = TRUE}
+reference_based(ob, mk_b, method = 'j2r')
+```
+
+```{r binary-guards}
+guard <- function(label, expr) {
+  r <- tryCatch({
+    expr
+    'allowed'
+  }, error = function(e) 'blocked')
+  data.frame(call = label, result = r)
+}
+rbind(
+  guard('binomial, MCAR', dropout_mask(ob, target = 0.2)),
+  guard('binomial, MAR, no center',
+        dropout_mask(ob, target = 0.2, psi1 = 0.3)),
+  guard('binomial, MAR, center given',
+        dropout_mask(ob, target = 0.2, psi1 = 0.3, center = 0.5)),
+  guard('binomial, reference_based', reference_based(ob, mk_b, 'j2r'))
+)
+```
+
+Mask *application* makes no distributional assumption: `apply_mask()`
+and `mask_from_data()` operate on indices and work for every family.
