@@ -26,7 +26,12 @@ Generation is by **inversion of the cumulative hazard**, which is
 exact. Under proportional hazards the individual cumulative hazard is
 `H_i(t) = H_0(t) exp(lp_i)`, so if `E ~ Exp(1)` then
 `T = H_0^{-1}(E / exp(lp_i))` has precisely the intended
-distribution — no grid, no discretization.
+distribution, with no grid and no discretization. The same inversion
+works identically for both baseline hazards described below.
+
+For recurrent events the inversion is applied to successive partial
+sums of i.i.d. `Exp(1)` variates, which yields the event times of a
+non-homogeneous Poisson process with intensity `h_i(t)`.
 
 ## Single event
 
@@ -73,7 +78,9 @@ the first, and the event rate reflects that.
 The Weibull covers monotone hazards and reduces to the exponential at
 `shape = 1`. The **piecewise exponential** expresses an arbitrary
 hazard shape without committing to a parametric family, which is why
-it is the usual choice in trial simulation.
+it is the usual choice in trial simulation and what `simtrial` is
+built on. Its cumulative hazard is piecewise linear, so inversion
+remains exact.
 
 ```{r piecewise}
 set.seed(4101)
@@ -93,7 +100,11 @@ data.frame(interval = c("[0,6)", "[6,12)", "[12,20]"),
 ## A delayed treatment effect
 
 `effect_lag` breaks proportional hazards deliberately: the arms are
-indistinguishable until the lag and diverge after it. This is the
+indistinguishable until the lag and diverge after it. Setting
+`effect_lag = L` gives intensity `h_i(t) = h_0(t) exp(lp_i * I(t > L))`.
+The individual cumulative hazard remains invertible in closed form, so
+this is still generated exactly rather than by discretization. This is
+the
 shape immuno-oncology trials show, and the one anti-amyloid trials in
 Alzheimer's disease are generally argued to show. A constant hazard
 ratio cannot represent it.

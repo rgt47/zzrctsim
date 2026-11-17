@@ -164,11 +164,16 @@ baseline removes variation the unadjusted comparison leaves in.
 
 ## Where to go next
 
-- `vignette("dual-parameterization")` — declaring a DGM through a
+- `vignette('design')`: the layered architecture, its contracts, the
+  Monte Carlo conventions of the driver, and which response families
+  each layer supports.
+- `vignette('trial-design')`: run-in and common-close phases,
+  staggered accrual, and sample size by simulation.
+- `vignette('dual-parameterization')`: declaring a DGM through a
   covariance instead of random effects, and when the two are
   interchangeable.
-- `vignette("missing-data")` — dropout mechanisms, reusable masks, and
+- `vignette('missing-data')`: dropout mechanisms, reusable masks, and
   reference-based trajectories.
-- `vignette("time-to-event")` — single and recurrent events.
-- `vignette("comparison-lme4")` and `vignette("comparison-simr")` —
+- `vignette('time-to-event')`: single, recurrent, and derived events.
+- `vignette('comparison-lme4')` and `vignette('comparison-simr')`:
   how this relates to tools you may already use.
