@@ -319,6 +319,11 @@ docker-vignettes: docker-document ## Build vignettes in the container
 # would silently skip the provenance stamp and the staged copy in share/.
 # render.sh calls rmarkdown::render internally, so the output is unchanged.
 docker-render: ## Render REPORT (default analysis/report/report.Rmd)
+	@if [ ! -f "$(REPORT)" ]; then \
+	  echo "docker-render: '$(REPORT)' not found." >&2; \
+	  echo "Run: make docker-render REPORT=path/to/report.Rmd" >&2; \
+	  exit 1; \
+	fi
 	$(DOCKER_RUN) bash tools/render.sh "$(REPORT)"
 
 # Run an arbitrary R script in the container (used by zzcollab::run_script)
